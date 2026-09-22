@@ -1,6 +1,6 @@
 {
   "name": "mullion",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A tiling layout for a page you already have: it adopts the document, puts it back when the window narrows, and tells a pane nobody is looking at to stop working.",
   "keywords": ["tiling", "layout", "panes", "splitter", "dock", "tabs",
                "progressive-enhancement", "no-dependencies"],
@@ -22,6 +22,7 @@
   "files": ["src", "LICENSE", "README.md"],
   "sideEffects": ["*.css"],
   "scripts": {
+    "prepublishOnly": "npm run types && npm test",
     "test": "node test/check.mjs",
     "types": "tsc",
     "demo": "node test/serve.mjs",
