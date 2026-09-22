@@ -1,0 +1,126 @@
+/*
+ * Copyright (C) 2026 Misha Nasledov
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/**
+ * Types for `panes.js`, which is plain JavaScript and stays that way.
+ *
+ * The module has to be loadable by a browser as it stands: one of the
+ * pages it was written for copies it into a site with no build step at
+ * all, and a module that needs compiling before it can be read is a
+ * module that page cannot use. So a declaration file rather than a
+ * rewrite, which is what lets a TypeScript consumer and a build-less one
+ * share one source.
+ *
+ * Hand-written from the module's own comments and checked against its
+ * code. Anything wrong in here is wrong silently, which is the cost of
+ * the arrangement and worth saying out loud.
+ */
+
+/** A leaf: one or more panes as tabs, with `active` an index into the
+ *  ones currently in play. */
+export interface PaneLeaf {
+  tabs: string[];
+  active?: number;
+}
+
+/** A split: a direction, a fraction per child, and the children. */
+export interface PaneSplit {
+  dir: 'row' | 'col';
+  size: number[];
+  kids: PaneNode[];
+}
+
+export type PaneNode = PaneLeaf | PaneSplit;
+
+export interface PanesOptions {
+  /** The element the layout is drawn into. */
+  root: HTMLElement;
+  /** Every pane this page has, in the document's order. Each is the id of
+   *  an element marked `data-pane`; a name with no such element is
+   *  skipped rather than raised. */
+  catalog: string[];
+  /** One default layout per mode. */
+  layouts?: Record<string, PaneNode>;
+  /** Which of them to open on. */
+  mode: string;
+  /** The localStorage key prefix; the mode is appended. */
+  store?: string;
+  /** Extra selector for "a key here is editing, not a command", beyond
+   *  textarea, input, select and contenteditable. */
+  editing?: string;
+  /** A pane came into view, or left it. The whole of what tiling asks of
+   *  a page: work behind a background tab can stop. */
+  onShow?: (id: string, on: boolean) => void;
+  /** Whether to tile when the screen allows it, absent `?panes=`. */
+  on?: boolean;
+
+  /** The screen a tiled layout is worth having on. */
+  media?: string;
+  /** A divider's thickness in CSS pixels; also written onto the root as
+   *  `--pane-split`, so the stylesheet draws exactly this. */
+  split?: number;
+  /** A leaf's own floor in CSS pixels. */
+  leaf?: number;
+  /** How much of a leaf's edge counts as an edge when a tab is dropped
+   *  on it, as a fraction of the box. */
+  edge?: number;
+  /** The query parameter that forces the tiler on or off. */
+  param?: string;
+  /** Where a layout is kept between visits. */
+  storage?: {
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+    removeItem(key: string): void;
+  };
+  /** The commands, merged over the defaults. */
+  keys?: Partial<PaneKeys>;
+}
+
+export interface PaneKeys {
+  /** Whether a keydown is a command at all. Alt by default, because
+   *  wherever the bare letters already mean something a tiler that took
+   *  one would have taken it. */
+  chord: (e: KeyboardEvent) => boolean;
+  /** `KeyboardEvent.code` values, not `key`: a command is a place on the
+   *  keyboard. */
+  splitRow: string[];
+  splitCol: string[];
+  zoom: string[];
+  close: string[];
+  reset: string[];
+}
+
+export interface Panes {
+  /** Whether the mode a pane belongs to is up. Not the same as visible:
+   *  an unavailable pane leaves the layout without being forgotten by
+   *  it. Writes `hidden` on the element. */
+  available(id: string, on: boolean): void;
+  /** Switch to another named layout. */
+  mode(name: string): void;
+  /** Whether a pane is in front of anybody now. */
+  visible(id: string): boolean;
+  /** One element over every pane, for popovers: a pane scrolls, and a
+   *  popover inside a scroller is clipped by it. */
+  overlay(): HTMLElement;
+  /** The layout as it stands, copied. */
+  layout(): PaneNode | null;
+  /** Raise a pane: in front of its leaf, and out of the drawer if that is
+   *  where it was. `focus: false` for a pane the page is raising at
+   *  somebody rather than for them. */
+  present(id: string, opts?: { focus?: boolean }): void;
+  /** Put a pane in the drawer. */
+  close(id: string): void;
+  /** What its tab says. */
+  setTitle(id: string, text: string): void;
+  /** Whether a layout is up at all. */
+  tiled(): boolean;
+}
+
+export function createPanes(options: PanesOptions): Panes;
+
+/** A popover at a page coordinate, held inside the window. Exported here
+ *  and unrelated to tiling. */
+export function placePopover(box: HTMLElement, x: number, y: number): void;

@@ -1,0 +1,30 @@
+{
+  "name": "mullion",
+  "version": "0.1.0",
+  "description": "A tiling layout for a page you already have: it adopts the document, puts it back when the window narrows, and tells a pane nobody is looking at to stop working.",
+  "keywords": ["tiling", "layout", "panes", "splitter", "dock", "tabs",
+               "progressive-enhancement", "no-dependencies"],
+  "license": "MIT",
+  "author": "Misha Nasledov <misha@nasledov.com>",
+  "repository": { "type": "git", "url": "git+https://github.com/mishan/mullion.git" },
+  "homepage": "https://github.com/mishan/mullion",
+  "bugs": "https://github.com/mishan/mullion/issues",
+  "type": "module",
+  "main": "./src/panes.js",
+  "types": "./src/panes.d.ts",
+  "exports": {
+    ".": { "types": "./src/panes.d.ts", "default": "./src/panes.js" },
+    "./popover.js": "./src/popover.js",
+    "./panes.css": "./src/panes.css",
+    "./package.json": "./package.json"
+  },
+  "files": ["src", "LICENSE", "README.md"],
+  "sideEffects": ["*.css"],
+  "scripts": {
+    "test": "node test/check.mjs",
+    "demo": "node test/serve.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
