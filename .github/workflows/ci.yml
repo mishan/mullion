@@ -1,0 +1,36 @@
+# The tests are a browser driving demo/index.html, which is the whole
+# claim this module makes: that it adopts a document and puts it back. So
+# there is one job, it installs one browser, and it runs them.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The declarations are hand-written, so they are checked rather
+      # than trusted.
+      - run: npm run types
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - run: npm test

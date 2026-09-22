@@ -1,10 +1,17 @@
 # mullion
 
+[![ci](https://github.com/mishan/mullion/actions/workflows/ci.yml/badge.svg)](https://github.com/mishan/mullion/actions/workflows/ci.yml)
+
 A tiling layout for a page you already have.
 
 A mullion is the bar that divides a window into panes. This is that, for
 the web: splits, dividers, tabs, a drawer and a keyboard, over a document
 somebody else wrote.
+
+![A tab dragged onto a pane to stack it, onto an edge to split, and onto the drawer to close it](https://raw.githubusercontent.com/mishan/mullion/main/demo/mullion.gif)
+
+**[Try it](https://mishan.github.io/mullion/)** — the same page the tests
+drive, on a window wider than 60em.
 
 ```sh
 npm install mullion
@@ -191,13 +198,17 @@ placePopover(menu, x, y);   // and held inside the window
 npm run demo   # http://127.0.0.1:8080/demo/
 ```
 
+Or [the same page on the web](https://mishan.github.io/mullion/).
+
 `demo/` is also the fixture the tests drive, which is deliberate: what
 the module promises is about a document, and a claim about a document
 needs one with enough in it to be worth making.
 
 ```sh
 npm install && npx playwright install chromium
-npm test
+npm test       # the demo, in a browser
+npm run types  # the declarations, which are hand-written
+npm run shot   # the gif above, re-recorded (needs ffmpeg)
 ```
 
 ## License

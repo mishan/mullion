@@ -1,0 +1,62 @@
+# The demo, on GitHub Pages.
+#
+# demo/index.html imports ../src/panes.js and ../src/panes.css, so the
+# site is those two directories and nothing else, laid out the way the
+# repository lays them out -- the page published is the page a reader
+# checks out, which is the point of having one demo rather than a
+# built copy of it.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One at a time, and a run already going is left to finish: a half
+# published site is worse than an old one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r src demo _site/
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+          <meta charset="utf-8">
+          <title>mullion</title>
+          <meta http-equiv="refresh" content="0; url=demo/">
+          </head>
+          <body><p><a href="demo/">The demo</a>.</p></body>
+          </html>
+          HTML
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

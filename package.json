@@ -23,9 +23,12 @@
   "sideEffects": ["*.css"],
   "scripts": {
     "test": "node test/check.mjs",
-    "demo": "node test/serve.mjs"
+    "types": "tsc",
+    "demo": "node test/serve.mjs",
+    "shot": "node tools/shot.mjs"
   },
   "devDependencies": {
-    "playwright": "1.63.0"
+    "playwright": "1.63.0",
+    "typescript": "5.9.3"
   }
 }

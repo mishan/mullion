@@ -60,7 +60,8 @@ body.tiled .panebody > p { flex: 0 0 auto; }
     width: 3000px;
     padding: 1em 0;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    gap: 1em;
 }
 
 .popover
