@@ -93,7 +93,8 @@ const drag = async (from, to, at = { x: 0.5, y: 0.5 }) =>
 };
 
 const leafCount = () => page.evaluate(
-    () => document.querySelectorAll('#root .paneleaf').length);
+    () => [...document.querySelectorAll('#root .paneleaf')]
+        .filter((n) => n.checkVisibility()).length);
 
 try
 {
@@ -222,6 +223,16 @@ try
               document.getElementById('pane-fx-plot').closest('.paneleaf')),
           'and they are two tabs of one leaf');
 
+    /* Shown, and not merely told. A pane behind a tab is hidden with the
+       attribute, and `hidden' is a user agent's rule -- which every rule
+       in panes.css outranks by being an author's. A `.pane { display:
+       flex }' with nothing said about `hidden' leaves the pane behind the
+       tab on the screen, drawing nothing, under the one in front. */
+    check(await page.evaluate(() =>
+              !document.getElementById('pane-fx-paint').checkVisibility() &&
+              document.getElementById('pane-fx-plot').checkVisibility()),
+          'and the one behind is not on the screen, not merely not drawing');
+
     /* And the one behind really stops: a loop that was told and carried
        on looks identical to one that was told and stopped, from the
        outside, unless somebody counts. */
@@ -241,6 +252,52 @@ try
 
     check(swapped.paint && !swapped.plot,
           'and raising the other one turns the first one off');
+
+    /* ---- and what a render costs the document ----
+     *
+     * The tiler adopts elements the page already had, so a render that
+     * rebuilt the layout out of new boxes would take every one of them
+     * out of the document and put it back -- and the document does not
+     * treat that as a move. A box scrolled half way down is at the top
+     * again and an <iframe> loads a second time, neither of which anybody
+     * asked for. So: a pane that did not move is not moved.
+     */
+    const untouched = await page.evaluate(async () =>
+    {
+        const scroller = document.getElementById('fx-scroll');
+        const frame = document.createElement('iframe');
+        let loads = 0;
+
+        frame.src = 'about:blank';
+        frame.addEventListener('load', () => { loads++; });
+        document.getElementById('fx-list').append(frame);
+
+        await new Promise((go) => setTimeout(go, 200));
+
+        scroller.scrollLeft = 200;
+
+        const was = { scroll: scroller.scrollLeft, loads };
+
+        /* Three renders over three different reasons, none of which is
+           "this pane moved". */
+        window.tiler.pane('setTitle', 'fx-doc', 'Doc');
+        document.getElementById('panetab-fx-paint').click();
+        document.getElementById('panetab-fx-plot').click();
+
+        await new Promise((go) => setTimeout(go, 300));
+
+        frame.remove();
+
+        return { was, now: { scroll: scroller.scrollLeft, loads } };
+    });
+
+    check(untouched.now.scroll === untouched.was.scroll,
+          'a render leaves a pane nobody moved where it was scrolled to: ' +
+          `${untouched.was.scroll} then ${untouched.now.scroll}`);
+
+    check(untouched.now.loads === untouched.was.loads,
+          `and does not load its <iframe> again: ${untouched.was.loads} ` +
+          `then ${untouched.now.loads}`);
 
     /* ---- the dividers ---- */
 
@@ -339,6 +396,41 @@ try
                   .some((b) => b.textContent === 'List')),
           'a tab dragged onto the drawer closes to it');
 
+    /* And onto a drawer with nothing in it yet, which is the one drop
+       that has nowhere to aim otherwise: an empty drawer is not on the
+       screen, so it comes back for as long as a tab is in the air. */
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.tiler.pane('present', 'fx-notes'));
+    await page.waitForTimeout(200);
+
+    check(await page.evaluate(
+              () => !document.querySelector('.panedrawer').checkVisibility()),
+          'a drawer with nothing in it is not a row of the window');
+
+    const from = await page.locator('#panetab-fx-notes').boundingBox();
+    const root = await page.locator('#root').boundingBox();
+
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(root.x + 60, root.y + 9, { steps: 12 });
+    await page.waitForTimeout(100);
+
+    const offered = await page.evaluate(
+        () => document.querySelector('.panedrawer').checkVisibility());
+
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    check(offered && await page.evaluate(() =>
+              [...document.querySelectorAll('.paneclosed')]
+                  .some((b) => b.textContent === 'Notes')),
+          'and it is there to be dropped on while one is');
+
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+    await drag('#panetab-fx-list', '.panedrawer');
+
     const splits = () => page.evaluate(() =>
     {
         const count = (n) => n.tabs !== undefined
@@ -426,6 +518,21 @@ try
        contract as a background tab and the reason zoom costs nothing. */
     check(await page.evaluate(() => !window.tiler.drawing().plot),
           'and the canvas it covered stopped drawing');
+
+    /* One pane filling the layout is not one pane filling the window: a
+       zoom that covered the drawer would put every closed pane a chord
+       out of reach, which is the opposite of what the drawer is for. */
+    check(await page.evaluate(() =>
+          {
+              const drawer = document.querySelector('.panedrawer');
+              const leaf = document.getElementById('pane-fx-paint')
+                                   .closest('.paneleaf');
+
+              return drawer.checkVisibility() &&
+                     leaf.getBoundingClientRect().top >=
+                         drawer.getBoundingClientRect().bottom;
+          }),
+          'and the drawer is still above it, not under it');
 
     await page.keyboard.press('Alt+Enter');
     await page.waitForTimeout(200);
@@ -533,6 +640,38 @@ try
     check(await page.textContent('#panetab-fx-notes') === 'Renamed',
           'and its tab says what it was told to say');
 
+    /* ---- and a split left holding the layout ----
+     *
+     * A fraction is a share of a split, so a box that was somebody's
+     * child and is now the top of the tree is in no split at all.
+     * Carrying the share it had there would leave the layout at 45% of
+     * the window with the rest blank -- the same mistake `grow' is
+     * written to avoid one level down, made one level up.
+     */
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+
+    for (const id of ['fx-paint', 'fx-doc', 'fx-only-one'])
+        await page.evaluate((one) => window.tiler.pane('close', one), id);
+
+    await page.waitForTimeout(250);
+
+    const promoted = await page.evaluate(() =>
+    {
+        const root = document.getElementById('root');
+        const layout = [...root.children].find(
+            (c) => c.matches('.panebox, .paneleaf'));
+
+        return Math.round(root.getBoundingClientRect().bottom -
+                          layout.getBoundingClientRect().bottom);
+    });
+
+    check(promoted <= 1,
+          `a split left holding the layout fills it: ${promoted}px spare`);
+
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+
     /* ---- a popover over the layout ---- */
 
     await page.keyboard.press('Alt+Digit0');
@@ -630,9 +769,27 @@ try
         two.available('two-b', false);
 
         const b = document.getElementById('two-b');
+        const marked = b.hasAttribute('data-pane-off') && !b.hidden;
 
-        return { wide, afterW, afterQ, saved,
-                 marked: b.hasAttribute('data-pane-off') && !b.hidden };
+        two.available('two-b', true);
+
+        /* And handed back. What a page that unmounts this needs is every
+           pane under its own parent again and nothing of the tiler's
+           still listening -- a chord answered after destroy() is the
+           second instance nobody can get rid of. */
+        two.destroy();
+
+        const back = {
+            emptied: root.children.length === 0,
+            rooted: !root.classList.contains('panesroot'),
+            home: document.getElementById('two-a').parentElement === document.body,
+            tiled: two.tiled(),
+        };
+
+        fire('KeyQ');
+
+        return { wide, afterW, afterQ, saved, marked, back,
+                 afterDead: root.children.length };
     });
 
     check(told.wide === 20,
@@ -650,6 +807,11 @@ try
     check(told.saved.length > 0 &&
           told.saved.every((k) => k.startsWith('panes:')),
           `and what it saves goes where it was told: ${told.saved.join(' ')}`);
+
+    check(told.back.emptied && told.back.rooted && told.back.home &&
+          !told.back.tiled && told.afterDead === 0,
+          'and destroy() puts the document back and stops answering: ' +
+          JSON.stringify(told.back));
 }
 catch (e)
 {

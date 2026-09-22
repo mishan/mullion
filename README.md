@@ -81,7 +81,7 @@ nowhere in here that makes one.
 
 ## What a person can do
 
-| | |
+| | what it does |
 |---|---|
 | drag a tab | onto a pane to stack, onto an edge to split, onto the drawer to close |
 | the cross on a tab | close it to the drawer |
@@ -101,11 +101,11 @@ them are an argument (`keys`) for a page where that is still wrong.
 
 ## Markup
 
-| attribute | what |
+| attribute | what it says |
 |---|---|
 | `data-pane` | this element is a pane |
 | `data-pane-title` | what its tab says (a `<details>`'s `<summary>` otherwise) |
-| `data-pane-min` | how narrow a divider may make it, in pixels |
+| `data-pane-min` | how narrow a divider may make it, in pixels (240) |
 | `data-pane-off` | this pane's mode is not up — set it, or call `available()` |
 
 `data-pane-off` and not `hidden`, deliberately: `hidden` is a word most
@@ -117,7 +117,7 @@ back.
 
 Everything below is a default rather than a rule.
 
-| | | default |
+| option | what it is | default |
 |---|---|---|
 | `root` | where the layout is drawn | — |
 | `catalog` | the ids of the panes, in document order | — |
@@ -137,7 +137,13 @@ Everything below is a default rather than a rule.
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
-`layout()`, `overlay()`, `tiled()`.
+`layout()`, `overlay()`, `tiled()`, `destroy()`.
+
+`destroy()` is the way back out: every pane under its own parent again,
+every listener off the window, and the page as it was found. A page that
+mounts this into something it later unmounts needs it, and so does anyone
+calling `createPanes` a second time over the same document — two tilers
+answer the same chord twice.
 
 ## Styling
 

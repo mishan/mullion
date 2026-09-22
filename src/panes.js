@@ -71,8 +71,8 @@
  */
 
 /* The screen a tiled layout is worth having on. Both halves matter, and
-   style.css already argues for the second: a finger is not a mouse, and a
-   divider you cannot grab is worse than no divider. */
+   the second is the one that gets forgotten: a finger is not a mouse, and
+   a divider you cannot grab is worse than no divider. */
 const MEDIA = '(min-width: 60em) and (pointer: fine)';
 
 /* A divider's thickness and a leaf's own floor, in CSS pixels. The first
@@ -202,6 +202,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     const wanted = asked(param, on);
 
     let tiled = false;
+    let dead = false;           /* once destroy() has handed it all back */
     let above = null;           /* the overlay, once anything wants one */
     let hint = null;            /* where a dragged tab would land */
 
@@ -221,19 +222,20 @@ export function createPanes ({ root, catalog, layouts, mode,
     let focus = null;
 
     /* The leaf filling the layout, if one is. Zoom is what makes tiling
-       bearable on a laptop and it costs nothing: the rest are not drawn,
-       and onShow fires for everything that just left the screen. */
+       bearable on a laptop and it costs nothing: the rest are drawn and
+       not shown, so that coming back out of it moves nothing, and onShow
+       fires for everything that just left the screen. */
     let zoom = null;
 
     for (const id of catalog)
     {
         const el = document.getElementById(id);
 
-        /* A page that does not have this one. The catalogs are two
-           lists over two documents that share most of their panes, and
-           the one that is missing here is not an error -- a name listed
-           by a page and marked in no element of it is catalogcheck.mjs's
-           to catch, before a browser is ever opened. */
+        /* A page that does not have this one. A catalog is written
+           against a document, and two pages sharing most of their panes
+           share most of a catalog -- so a name this page has no element
+           for is not an error. It is a pane this page does not have, and
+           it is left out rather than raised. */
         if (el === null || !el.hasAttribute('data-pane'))
             continue;
 
@@ -242,7 +244,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         const summary = el.tagName === 'DETAILS'
             ? el.querySelector(':scope > summary') : null;
 
-        panes.set(id, {
+        const p = {
             id, el, summary,
             title: el.dataset.paneTitle ?? summary?.textContent.trim() ?? id,
             min: Number(el.dataset.paneMin) || 240,
@@ -256,10 +258,19 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             host: null,             /* the section it is shown in */
             wasOpen: true,          /* the fold it had before adoption */
-        });
+            fold: null,             /* the listener, so destroy() can go */
+        };
 
+        panes.set(id, p);
+
+        /* Kept rather than written inline, because `destroy' has to be
+           able to take it off again: a module that adopts a document has
+           to be able to hand it back whole. */
         if (summary !== null)
-            el.addEventListener('toggle', () => settle());
+        {
+            p.fold = () => settle();
+            el.addEventListener('toggle', p.fold);
+        }
     }
 
     /* Whether a pane's work is worth doing.
@@ -315,8 +326,13 @@ export function createPanes ({ root, catalog, layouts, mode,
         p.host = document.createElement('section');
         p.host.className = 'pane';
         p.host.id = `pane-${p.id}`;
-        p.host.setAttribute('role', 'region');
-        p.host.setAttribute('aria-label', p.title);
+
+        /* `tabpanel' rather than `region': the strip above it is a
+           tablist whether it holds one tab or four, so what this is is
+           the panel that tab controls. Named by the tab, through
+           `aria-labelledby' rather than an `aria-label' beside it -- two
+           names on one element is one of them quietly winning. */
+        p.host.setAttribute('role', 'tabpanel');
 
         p.el.replaceWith(p.slot);
         body.append(p.el);
@@ -587,7 +603,11 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         drawer(id);
         leaf.tabs.push(id);
-        leaf.active = leaf.tabs.length - 1;
+
+        /* Counted over the tabs in play and not over all of them:
+           `active' is an index into the first, and a leaf holding a pane
+           whose mode is down has fewer of the one than the other. */
+        leaf.active = liveTabs(leaf).length - 1;
     };
 
     /* And beside one, which is what splitting is: the leaf is replaced by
@@ -642,8 +662,13 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (at === null)
             return null;
 
-        if (at.closest('.panedrawer') !== null)
-            return { drop: 'drawer' };
+        const tray = at.closest('.panedrawer');
+
+        /* Over the drawer itself, and not over the whole layout: what a
+           drop does is put this pane there, and a hint the size of the
+           root says the opposite of that. */
+        if (tray !== null)
+            return { drop: 'drawer', box: tray };
 
         const box = at.closest('.paneleaf');
         const leaf = seen.get(box);
@@ -718,6 +743,12 @@ export function createPanes ({ root, catalog, layouts, mode,
 
                 dragging = true;
                 tab.classList.add('panedragging');
+
+                /* And the drawer, which is where this could be dropped
+                   and is not on the screen while it is empty. Closing
+                   the first pane should not need the drawer to already
+                   have one in it. */
+                root.classList.add('panedrag');
                 where = under(m.clientX, m.clientY, id);
                 mark(where);
             };
@@ -728,6 +759,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 tab.removeEventListener('pointerup', up);
                 tab.removeEventListener('pointercancel', up);
                 tab.classList.remove('panedragging');
+                root.classList.remove('panedrag');
                 mark(null);
 
                 if (!dragging || where === null)
@@ -765,23 +797,100 @@ export function createPanes ({ root, catalog, layouts, mode,
         return d;
     };
 
+    /*
+     * The box a node is drawn as, kept from render to render.
+     *
+     * Which is most of what makes a render cheap, and all of what makes
+     * it harmless. Building the tree out of new elements every time means
+     * every pane is taken out of the document and put back, and the
+     * document does not treat that as a move: a box somebody had scrolled
+     * half way down is at the top again, an <iframe> loads a second time,
+     * a media element stops. None of which anybody asked for, and all of
+     * which used to happen on every tab click.
+     *
+     * So a node keeps its box, a box keeps the panes that did not go
+     * anywhere, and what a render moves is what actually moved. Weakly,
+     * because the tree is replaced whole on a mode or a reset and the
+     * nodes it held are then nobody's.
+     */
+    const boxes = new WeakMap();
+    const rails = new WeakMap();
+
+    const elementFor = (node) =>
+    {
+        let box = boxes.get(node);
+
+        if (box !== undefined)
+            return box;
+
+        box = el(isLeaf(node) ? 'paneleaf' : 'panebox');
+        boxes.set(node, box);
+
+        if (isLeaf(node))
+        {
+            const strip = el('panetabs');
+
+            strip.setAttribute('role', 'tablist');
+            strip.setAttribute('aria-label', 'Panes');
+            box.append(strip);
+
+            /* Which leaf the next thing out of the drawer goes into, and
+               which one the keyboard is in. Captured, because a press
+               that lands in a canvas never reaches this box otherwise.
+               Once, now that the box outlives the render. */
+            box.addEventListener('pointerdown', () => { focus = node; },
+                                 true);
+        }
+
+        return box;
+    };
+
+    /* The box that stands for a node, which is not always its own: a
+       split with one live child is that child, since there is nothing to
+       divide. */
+    const standIn = (node) =>
+        !isLeaf(node) && liveKids(node).length === 1
+            ? standIn(liveKids(node)[0])
+            : elementFor(node);
+
+    /* The children a box is to have, in that order, with nothing left
+       after them -- and anything already where it belongs left alone,
+       which is the point of the whole arrangement: moving an element is
+       what costs. */
+    const arrange = (box, kids) =>
+    {
+        kids.forEach((kid, i) =>
+        {
+            if (box.children[i] !== kid)
+                box.insertBefore(kid, box.children[i] ?? null);
+        });
+
+        while (box.children.length > kids.length)
+            box.lastElementChild.remove();
+    };
+
     /* A leaf: a strip of tabs and a host per pane, with the one in front
-     * shown and the rest kept beside it.
+     * shown and the rest beside it, hidden.
      *
      * The strip is the pane's header when there is one pane, and a row of
      * them when there are more; it is the same element either way, which
      * is why a <details> adopted here can hand its disclosure over to it
      * without the page having two kinds of header to style.
+     *
+     * The strip is written out again every time because it is buttons and
+     * nothing else. The hosts are not: one is touched only where it has
+     * come from somewhere else. What order they sit in says nothing --
+     * one of them is shown and the rest are not -- so it is not made to
+     * say anything, and a tab raised over another moves no boxes at all.
      */
-    const leafOf = (leaf) =>
+    const fillLeaf = (leaf) =>
     {
         const ids = liveTabs(leaf);
-        const box = el('paneleaf');
-        const strip = el('panetabs');
+        const box = elementFor(leaf);
+        const strip = box.firstElementChild;
+        const wraps = [];
 
         leaf.active = Math.min(Math.max(leaf.active ?? 0, 0), ids.length - 1);
-        strip.setAttribute('role', 'tablist');
-        strip.setAttribute('aria-label', 'Panes');
 
         ids.forEach((id, i) =>
         {
@@ -820,7 +929,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             shut.type = 'button';
             shut.className = 'paneshut';
             shut.id = `paneshut-${id}`;
-            shut.textContent = '\u00d7';
+            shut.textContent = '×';
             shut.title = `Close ${p.title}`;
             shut.setAttribute('aria-label', `Close ${p.title}`);
             shut.tabIndex = front ? 0 : -1;
@@ -829,26 +938,29 @@ export function createPanes ({ root, catalog, layouts, mode,
             host.hidden = !front;
             host.setAttribute('aria-labelledby', tab.id);
 
-            if (front)
+            /* In front of somebody, which a zoom is entitled to answer
+               no to: the other leaves are drawn and not shown, and a
+               pane nobody can see is a pane whose work can stop whatever
+               the reason nobody can see it. */
+            if (front && (zoom === null || zoom === leaf))
                 onScreen.add(id);
 
             attached.add(id);
+
+            if (host.parentElement !== box)
+                box.append(host);
+
             wrap.append(tab, shut);
-            strip.append(wrap);
-            box.append(host);
+            wraps.push(wrap);
         });
 
-        /* Which leaf the next thing out of the drawer goes into, and
-           which one the keyboard is in. Captured, because a press that
-           lands in a canvas never reaches this box otherwise. */
-        box.addEventListener('pointerdown', () => { focus = leaf; }, true);
+        strip.replaceChildren(...wraps);
 
         box.style.minWidth = `${minAcross(leaf, true)}px`;
         box.style.minHeight = `${least}px`;
-        box.prepend(strip);
+        box.classList.toggle('panefront', zoom === leaf);
+        box.hidden = false;
         seen.set(box, leaf);
-
-        return box;
     };
 
     /* A pane put away from its own tab, which is the drawer and not the
@@ -901,46 +1013,89 @@ export function createPanes ({ root, catalog, layouts, mode,
         e.preventDefault();
     };
 
-    /* A divider between two of a split's children, which is the one
-       control the layout has of its own.
+    /* What a divider is worth saying about itself: which share of the two
+       beside it the first one has. Written out rather than closed over,
+       since the divider outlives the pair. */
+    const tell = (node, at, bar) =>
+    {
+        const kids = liveKids(node);
+        const a = kids[at];
+        const b = kids[at + 1];
+
+        if (a === undefined || b === undefined)
+            return;
+
+        const fa = node.size[node.kids.indexOf(a)];
+        const fb = node.size[node.kids.indexOf(b)];
+
+        bar.setAttribute('aria-valuenow',
+                         String(Math.round(fa / (fa + fb) * 100)));
+    };
+
+    /* A divider between two of a split's live children, which is the one
+     * control the layout has of its own.
      *
      * A drag moves a fraction and nothing else: the two panes on either
      * side share what they had between them, every other fraction in the
      * tree is untouched, and the browser lays the result out. Neither
      * side goes below its minimum, which for a row is the widest pane
      * under it and for a column is a header and a line.
+     *
+     * Kept from render to render like every other box here, and by its
+     * place in the split rather than by the pair it happens to be
+     * between: what is on either side of a divider changes and the
+     * divider does not, so it asks when it is used instead of
+     * remembering.
      */
-    const dividerOf = (node, ia, ib, ea, eb) =>
+    const dividerOf = (node, at) =>
     {
+        const bars = rails.get(node) ?? [];
+
+        if (bars[at] !== undefined)
+            return bars[at];
+
         const row = node.dir === 'row';
         const bar = el('panesplit');
 
-        const told = () =>
+        const sides = () =>
         {
-            const share = node.size[ia] / (node.size[ia] + node.size[ib]);
+            const kids = liveKids(node);
+            const a = kids[at];
+            const b = kids[at + 1];
 
-            bar.setAttribute('aria-valuenow', String(Math.round(share * 100)));
+            return a === undefined || b === undefined ? null
+                 : { ia: node.kids.indexOf(a), ib: node.kids.indexOf(b),
+                     ea: standIn(a), eb: standIn(b) };
         };
 
         bar.setAttribute('role', 'separator');
         bar.setAttribute('aria-orientation', row ? 'vertical' : 'horizontal');
+
+        /* A separator somebody can put the focus on is a control, and a
+           control with no name is one a screen reader announces as
+           nothing at all. */
+        bar.setAttribute('aria-label', row ? 'Resize columns' : 'Resize rows');
         bar.setAttribute('aria-valuemin', '0');
         bar.setAttribute('aria-valuemax', '100');
         bar.tabIndex = 0;
-        told();
 
         /* By pixels rather than by fractions: what the two are worth now
            is what the browser made of them, so the drag follows the
            pointer exactly whatever else is in the split. */
         const by = (pixels) =>
         {
-            const ra = ea.getBoundingClientRect();
-            const rb = eb.getBoundingClientRect();
+            const s = sides();
+
+            if (s === null)
+                return;
+
+            const ra = s.ea.getBoundingClientRect();
+            const rb = s.eb.getBoundingClientRect();
             const was = row ? ra.width : ra.height;
             const both = was + (row ? rb.width : rb.height);
-            const floor = minAcross(node.kids[ia], row);
-            const ceiling = both - minAcross(node.kids[ib], row);
-            const sum = node.size[ia] + node.size[ib];
+            const floor = minAcross(node.kids[s.ia], row);
+            const ceiling = both - minAcross(node.kids[s.ib], row);
+            const sum = node.size[s.ia] + node.size[s.ib];
 
             /* Two panes that cannot both have what they asked for: the
                browser has already overflowed them and there is no
@@ -950,11 +1105,11 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             const now = Math.max(floor, Math.min(ceiling, was + pixels));
 
-            node.size[ia] = sum * (now / both);
-            node.size[ib] = sum - node.size[ia];
-            ea.style.flexGrow = grow(node, ia);
-            eb.style.flexGrow = grow(node, ib);
-            told();
+            node.size[s.ia] = sum * (now / both);
+            node.size[s.ib] = sum - node.size[s.ia];
+            s.ea.style.flexGrow = grow(node, s.ia);
+            s.eb.style.flexGrow = grow(node, s.ib);
+            tell(node, at, bar);
         };
 
         bar.addEventListener('pointerdown', (e) =>
@@ -1014,46 +1169,61 @@ export function createPanes ({ root, catalog, layouts, mode,
             render();
         });
 
+        bars[at] = bar;
+        rails.set(node, bars);
+
         return bar;
     };
 
-    /* A split: its live children with their fractions as `flex-grow',
-       and a divider between each pair. A split with one live child is
-       that child -- there is nothing to divide. */
-    const nodeOf = (node) =>
+    /* A split: its live children with their fractions as `flex-grow', and
+       a divider between each pair. A split with one live child is that
+       child -- there is nothing to divide -- which is what `standIn' says
+       and what this follows. */
+    const fill = (node) =>
     {
         if (isLeaf(node))
-            return leafOf(node);
+        {
+            fillLeaf(node);
+            return;
+        }
 
         const kids = liveKids(node);
 
         if (kids.length === 1)
-            return nodeOf(kids[0]);
+        {
+            fill(kids[0]);
+            return;
+        }
 
-        const box = el('panebox');
-        const made = [];
+        const box = elementFor(node);
+        const want = [];
 
         box.dataset.dir = node.dir;
 
-        for (const k of kids)
+        kids.forEach((k, i) =>
         {
-            const child = nodeOf(k);
+            const child = standIn(k);
 
             child.style.flexGrow = grow(node, node.kids.indexOf(k));
-            made.push(child);
-        }
 
-        made.forEach((child, i) =>
-        {
             if (i > 0)
-                box.append(dividerOf(node, node.kids.indexOf(kids[i - 1]),
-                                     node.kids.indexOf(kids[i]),
-                                     made[i - 1], child));
+            {
+                const bar = dividerOf(node, i - 1);
 
-            box.append(child);
+                tell(node, i - 1, bar);
+                want.push(bar);
+            }
+
+            want.push(child);
         });
 
-        return box;
+        arrange(box, want);
+
+        /* Filled after they are in place, and not before: a box takes its
+           children only while it is itself in the document, or the first
+           render after a split would detach every pane under it -- which
+           is the thing all of this is shaped to avoid. */
+        kids.forEach(fill);
     };
 
     /* The panes no leaf has room for, listed above the layout: one click
@@ -1061,11 +1231,13 @@ export function createPanes ({ root, catalog, layouts, mode,
        closed with them -- whichever one was last touched. Nothing here
        is a pane that has gone; a drawer is what makes closing one
        something other than losing it. */
+    const tray = el('panedrawer');
+
     const drawerOf = (out) =>
     {
-        const box = el('panedrawer');
+        const made = [];
 
-        box.hidden = out.length === 0;
+        tray.hidden = out.length === 0;
 
         if (out.length > 0)
         {
@@ -1077,7 +1249,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             said.className = 'panedrawerlabel';
             said.textContent = 'Closed:';
-            box.append(said);
+            made.push(said);
         }
 
         for (const id of out)
@@ -1101,10 +1273,12 @@ export function createPanes ({ root, catalog, layouts, mode,
             });
 
             grab(button, id);
-            box.append(button);
+            made.push(button);
         }
 
-        return box;
+        tray.replaceChildren(...made);
+
+        return tray;
     };
 
     /* Which panes the tree holds, whether or not this render drew them:
@@ -1133,6 +1307,17 @@ export function createPanes ({ root, catalog, layouts, mode,
         node === target ||
         (!isLeaf(node) && node.kids.some((k) => holds(target, k)));
 
+    /* The ones this render did not draw, kept out of sight but in the
+       document. Out of the document they would be out of getElementById
+       too, and a page that was handed its elements by name is a page a
+       pane put away must not have been taken apart. One element, kept,
+       for the same reason as all the others. */
+    const keep = el('panekeep');
+
+    /* And a leaf with nothing in it, for a layout every pane has been
+       closed out of. */
+    let blank = null;
+
     const render = () =>
     {
         const was = document.activeElement;
@@ -1152,6 +1337,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             seen = new Map();
             hint = null;
             root.replaceChildren();
+            root.classList.remove('panezoom');
             settle();
 
             return;
@@ -1175,41 +1361,62 @@ export function createPanes ({ root, catalog, layouts, mode,
         hint = null;
         inLayout = holding(tree);
 
-        const shown = zoom ?? tree;
         const out = closed();
-        const made = alive(shown) ? nodeOf(shown) : el('paneleaf');
+        const some = alive(tree);
 
-        /* A layout every pane has been closed out of, which is a blank
-           box and reads as a broken page rather than an empty one. The
-           drawer above it holds all of them; this says so. */
-        if (!alive(shown) && out.length > 0)
+        if (blank === null)
         {
+            blank = el('paneleaf');
+
+            /* A layout every pane has been closed out of, which is a
+               blank box and reads as a broken page rather than an empty
+               one. The drawer above it holds all of them; this says
+               so. */
             const note = el('paneempty');
 
             note.textContent = 'Every pane is closed. Reopen one from ' +
                                'the row above.';
-            made.append(note);
+            blank.append(note);
         }
 
-        /* The ones this render did not draw, kept out of sight but in the
-           document. Out of the document they would be out of
-           getElementById too, and every module on this page was handed
-           its element by name -- a pane put away is not a pane taken
-           apart. */
-        const kept = el('panekeep');
+        const made = some ? standIn(tree) : blank;
 
-        kept.hidden = true;
+        /* A fraction is a share of a split, and what goes here is not in
+           one: a box kept from an earlier render may have been somebody's
+           child then and carry their `flex-grow' still, which at the top
+           of the layout is the rule `grow' exists to avoid -- a layout
+           taking 45% of the room and leaving the rest blank. Whatever is
+           below this has its share written by `fill'; this has none. */
+        made.style.removeProperty('flex-grow');
+
+        blank.hidden = some;
+        keep.hidden = true;
+        root.classList.toggle('panezoom', zoom !== null);
+
+        /* The layout goes in before it is filled, so that every box takes
+           its children while it is already in the document: what a render
+           moves should be what moved, and an element appended to a
+           detached parent has moved whether anything asked it to or
+           not. */
+        arrange(root, [drawerOf(out), made, keep]);
+
+        if (some)
+            fill(tree);
 
         for (const p of panes.values())
-            if (!attached.has(p.id))
-                kept.append(p.host);
+            if (!attached.has(p.id) && p.host !== null)
+            {
+                p.host.hidden = true;
+
+                if (p.host.parentElement !== keep)
+                    keep.append(p.host);
+            }
 
         /* A leaf that went away takes the focus with it: a split that
            collapsed is not a place to put the next pane into. */
         if (focus !== null && boxOf(focus) === undefined)
             focus = null;
 
-        root.replaceChildren(drawerOf(out), made, kept);
         settle();
         refocus(was, from, tab);
     };
@@ -1279,6 +1486,12 @@ export function createPanes ({ root, catalog, layouts, mode,
        the arrow points, the nearest. */
     const toward = (leaf, [dx, dy]) =>
     {
+        /* One pane filling the layout is one pane there is: the others
+           are drawn, so that unzooming costs nothing, and a direction is
+           not a way to reach something nobody can see. */
+        if (zoom !== null)
+            return null;
+
         const here = boxOf(leaf)?.getBoundingClientRect();
 
         if (here === undefined)
@@ -1377,14 +1590,16 @@ export function createPanes ({ root, catalog, layouts, mode,
                it opens the first pane in the drawer there instead. */
             const dir = keymap.splitRow.includes(e.code) ? 'row' : 'col';
             const other = closed()[0];
+            const moving = ids.length > 1 ? id : other;
 
-            if (ids.length > 1)
-                beside(id, leaf, dir, true);
-            else if (other !== undefined)
-                beside(other, leaf, dir, true);
-            else
+            /* And refused where the two halves could not both have their
+               minimum, which is the question a drop onto an edge asks
+               too: a chord is another way to ask for a split, not
+               another rule about when one is allowed. */
+            if (moving === undefined || !splittable(leaf, moving, dir))
                 return;
 
+            beside(moving, leaf, dir, true);
             done(leaf);
         }
         else if (keymap.zoom.includes(e.code))
@@ -1457,7 +1672,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         {
             const p = panes.get(id);
 
-            if (p === undefined || off(p.el) === !ok)
+            if (dead || p === undefined || off(p.el) === !ok)
                 return;
 
             p.el.toggleAttribute(OFF, !ok);
@@ -1474,7 +1689,7 @@ export function createPanes ({ root, catalog, layouts, mode,
            mode. */
         mode: (name) =>
         {
-            if (name === where)
+            if (dead || name === where)
                 return;
 
             where = name;
@@ -1495,16 +1710,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         },
 
         /* One element over every pane, for the things that sit beside
-           what they belong to rather than inside it: the composer
-           canvas's params, the node canvas's port menu. A pane scrolls,
-           and a popover inside a scroller is clipped by it.
+           what they belong to rather than inside it -- a menu off a
+           handle, the parameters of the thing under the pointer. A pane
+           scrolls, and a popover inside a scroller is clipped by it.
          *
            At the document's origin and of no size, so what is placed in
            it is placed in page coordinates exactly as it was when the
            body held it. */
         overlay: () =>
         {
-            if (above === null)
+            if (above === null && !dead)
             {
                 above = document.createElement('div');
                 above.className = 'paneoverlay';
@@ -1582,14 +1797,49 @@ export function createPanes ({ root, catalog, layouts, mode,
         {
             const p = panes.get(id);
 
-            if (p === undefined)
+            if (dead || p === undefined)
                 return;
 
             p.title = text;
-            p.host?.setAttribute('aria-label', text);
             render();
         },
 
         tiled: () => tiled,
+
+        /* Handed back: every pane under its own parent again, every
+         * listener off whatever it was on, and the classes and the
+         * overlay gone from the page.
+         *
+         * A module that adopts a document owes the document a way out of
+         * it. Without one there is no unmounting the thing this was drawn
+         * into -- and no calling createPanes twice over the same page
+         * either, since the second keydown handler would answer the same
+         * chord as the first. Quiet if it has already been said.
+         */
+        destroy: () =>
+        {
+            if (dead)
+                return;
+
+            dead = true;
+            window.removeEventListener('keydown', command);
+            screen.removeEventListener('change', apply);
+
+            for (const p of panes.values())
+                if (p.fold !== null)
+                    p.el.removeEventListener('toggle', p.fold);
+
+            /* Through the same path the threshold takes, so that putting
+               the document back is one piece of code and not two: every
+               pane goes home and onShow is told what the page now is. */
+            tiled = false;
+            document.body.classList.remove('tiled');
+            render();
+
+            root.classList.remove('panesroot');
+            root.style.removeProperty('--pane-split');
+            above?.remove();
+            above = null;
+        },
     };
 }

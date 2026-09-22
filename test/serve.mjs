@@ -12,6 +12,10 @@
  * this has to do is answer GET with a file and the right type: ES
  * modules need `text/javascript' or a browser refuses to import them,
  * which is the whole reason `file://' will not do.
+ *
+ * It serves this repository to this machine and is not a web server: no
+ * listings, no ranges, no compression, and nothing here has been thought
+ * about as though somebody hostile could reach it.
  */
 
 import fs from 'node:fs';
@@ -38,11 +42,32 @@ export function serve (root, port = 0, host = '127.0.0.1')
     const server = http.createServer((req, res) =>
     {
         const url = new URL(req.url, 'http://localhost');
-        const file = path.join(root, decodeURIComponent(url.pathname));
+        let asked = null;
+
+        /* A percent escape that is not one. `decodeURIComponent' throws
+           on it, and an exception out of a request handler is the whole
+           process gone -- a development server that a stray address can
+           stop is a test run that fails for no reason anybody can see. */
+        try
+        {
+            asked = decodeURIComponent(url.pathname);
+        }
+        catch
+        {
+            res.writeHead(400).end('not a path');
+            return;
+        }
+
+        /* A directory is its index.html, which is what a link ending in a
+           slash means everywhere else and what `npm run demo' prints. */
+        const file = path.join(root,
+                               asked.endsWith('/') ? `${asked}index.html`
+                                                   : asked);
 
         /* A path that climbs out of the root is not a path this answers,
-           however it was spelled. */
-        if (!file.startsWith(root))
+           however it was spelled -- and the separator matters: `root' and
+           `root-other' share a prefix and nothing else. */
+        if (file !== root && !file.startsWith(root + path.sep))
         {
             res.writeHead(403).end('no');
             return;
@@ -50,6 +75,10 @@ export function serve (root, port = 0, host = '127.0.0.1')
 
         fs.readFile(file, (err, body) =>
         {
+            /* A directory asked for without the slash reads as EISDIR
+               rather than as a missing file; both are the same answer
+               here, since this serves what is there and does not make
+               listings. */
             if (err)
             {
                 res.writeHead(404).end('not here');

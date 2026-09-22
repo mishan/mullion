@@ -96,7 +96,8 @@ export interface PaneKeys {
 export interface Panes {
   /** Whether the mode a pane belongs to is up. Not the same as visible:
    *  an unavailable pane leaves the layout without being forgotten by
-   *  it. Writes `hidden` on the element. */
+   *  it. Writes `data-pane-off` on the element, and deliberately not
+   *  `hidden` -- see the note on the attribute in `panes.js`. */
   available(id: string, on: boolean): void;
   /** Switch to another named layout. */
   mode(name: string): void;
@@ -117,10 +118,11 @@ export interface Panes {
   setTitle(id: string, text: string): void;
   /** Whether a layout is up at all. */
   tiled(): boolean;
+  /** Put every pane back under its own parent, take every listener off
+   *  the window and the media query, and leave the page as it was found.
+   *  Quiet if it has already been called; the handle does nothing after
+   *  it. */
+  destroy(): void;
 }
 
 export function createPanes(options: PanesOptions): Panes;
-
-/** A popover at a page coordinate, held inside the window. Exported here
- *  and unrelated to tiling. */
-export function placePopover(box: HTMLElement, x: number, y: number): void;

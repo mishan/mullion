@@ -7,10 +7,10 @@
 /*
  * panes.css -- the tiled layout, and nothing else.
  *
- * Its own file beside style.css, because none of it applies until
- * panes.js has put `tiled' on the body: everything here is under that
- * class or inside the layout's own elements, so a page with the tiler off
- * is styled by style.css alone. That is the same claim panes.js makes
+ * Its own file, because none of it applies until panes.js has put
+ * `tiled' on the body: everything here is under that class or inside the
+ * layout's own elements, so a page with the tiler off is styled by the
+ * page's own stylesheet alone. That is the same claim panes.js makes
  * about the markup, made about the stylesheet.
  *
  * The tree is nested flex boxes. A split is a box with a direction, its
@@ -20,9 +20,9 @@
  * WHAT IS NOT HERE is what a page puts *in* a pane. That a <details>
  * adopted into one has to become a column is this file's to say -- it is
  * the price of adopting the document, and every page that does pays it.
- * That the piano roll stretches and the keys do not is the page's, and
- * it moved to style.css: no stylesheet shipped with a tiler can know
- * which of somebody's boxes is the one that wants the room.
+ * Which of a page's own boxes takes the room a pane has is the page's to
+ * say: no stylesheet shipped with a tiler can know which of somebody's
+ * boxes is the one that wants it.
  *
  * THE COLORS are read under this file's own names -- `--pane-line' and
  * the rest -- each with a fallback, so a page that maps nothing still
@@ -152,6 +152,20 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     background: var(--pane-bg, #ffffff);
     overflow: hidden;
 }
+
+/*
+ * Hidden, and hidden for real.
+ *
+ * `hidden' is an attribute the browser styles from its own stylesheet,
+ * and every rule in this file outranks that one simply by being here: a
+ * `.pane { display: flex }' beats a user agent's `[hidden] { display:
+ * none }' whatever the selectors weigh, because an author's sheet wins
+ * over a user agent's. So anything this file gives a `display' to has to
+ * say what `hidden' means for it as well -- panes.js hides the pane
+ * behind a tab and an empty drawer with the attribute, and without this
+ * line both of them stay on the screen.
+ */
+.pane[hidden], .panedrawer[hidden], .paneleaf[hidden] { display: none; }
 
 /* What was a block in a document is a column in a pane: the box that
    wants the room takes it, and the rows around it keep their height.
@@ -310,6 +324,32 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 .paneclosed:hover, .panetab:hover { color: var(--pane-fg, #202020); }
 
+/*
+ * The drawer while a tab is in the air.
+ *
+ * It is one of the three places a tab can be dropped and the only one
+ * that is not always on the screen, since an empty drawer is nothing to
+ * look at and takes a row of the window to say so. Which leaves closing
+ * the first pane by dragging as the one gesture with nowhere to aim -- so
+ * for as long as something is being dragged, there is somewhere.
+ */
+.panesroot.panedrag > .panedrawer[hidden]
+{
+    display: flex;
+    min-height: 1.7em;
+    border: 1px dashed var(--pane-line, #dcdcdc);
+    border-radius: 3px;
+}
+
+.panesroot.panedrag > .panedrawer[hidden]::after
+{
+    content: "Drop a tab here to close it";
+    align-self: center;
+    padding: 0 0.6em;
+    font-size: 0.85em;
+    color: var(--pane-dim, #666666);
+}
+
 /* A layout with every pane closed out of it, which is a box with nothing
    in it and needs to say that it is empty rather than broken. */
 .paneempty
@@ -320,6 +360,35 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     color: var(--pane-dim, #666666);
     text-align: center;
 }
+
+/*
+ * One pane filling the layout.
+ *
+ * By drawing the rest and not showing them rather than by not drawing
+ * them. A zoom that rendered the zoomed leaf alone would take every
+ * other pane out of the document and put it back on the way out, and the
+ * document does not treat that as a move -- a scrolled box is at the top
+ * again, an <iframe> loads a second time. Nothing moves here: the tree
+ * stands as it was, and everything that is not on the way to the one
+ * pane stops being drawn.
+ *
+ * Which leaves a chain of boxes from the layout down to that pane with
+ * one visible child each, and a flex box with one child gives it
+ * everything -- so the pane fills the layout by the same arithmetic that
+ * laid it out in the first place, in flow, still under the drawer rather
+ * than over it. `:has' is what says "on the way to it", and panes.css
+ * already asks for `:has' twice above.
+ */
+.panesroot.panezoom .paneleaf:not(.panefront),
+.panesroot.panezoom .panebox:not(:has(.panefront)),
+.panesroot.panezoom .panesplit { display: none; }
+
+/* And the fractions do not apply to a split with one child in it. Over
+   the inline `flex-grow' panes.js writes, which is what `!important' is
+   for and just about the only thing it is for: a share of a split is
+   meaningless where there is nothing to share with. */
+.panesroot.panezoom .panefront,
+.panesroot.panezoom .panebox:has(.panefront) { flex-grow: 1 !important; }
 
 /* Where a dragged tab would land, over the pane it would land in. */
 .panedrop
@@ -344,9 +413,9 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 /* A pane is a query container, so a page can lay its own boxes out
    against the room this one has rather than against the window's. That
-   is the tiler offering a question rather than answering one:
-   style.css's own rules about what wraps inside a pane are what make
-   use of it. */
+   is the tiler offering a question rather than answering one: the
+   page's own rules about what wraps inside a pane are what make use of
+   it. */
 body.tiled .panebody { container-type: inline-size; }
 
 /*

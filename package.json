@@ -14,7 +14,8 @@
   "types": "./src/panes.d.ts",
   "exports": {
     ".": { "types": "./src/panes.d.ts", "default": "./src/panes.js" },
-    "./popover.js": "./src/popover.js",
+    "./popover.js": { "types": "./src/popover.d.ts",
+                      "default": "./src/popover.js" },
     "./panes.css": "./src/panes.css",
     "./package.json": "./package.json"
   },
