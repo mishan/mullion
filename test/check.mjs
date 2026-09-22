@@ -299,6 +299,43 @@ try
           `and does not load its <iframe> again: ${untouched.was.loads} ` +
           `then ${untouched.now.loads}`);
 
+    /* And the pane the tab strip acted on, which is the one somebody
+       notices. Above is a bystander: a pane that was on the screen before
+       the render and after it. This is the other half -- a pane raised
+       over, and then raised back. Hidden is not detached here, so what it
+       was scrolled to is still what it is scrolled to; a layout that
+       rebuilt itself would have lost it twice over. */
+    /* Onto the leaf those two are stacked in, aimed at whichever of them
+       the block above left in front: a pane behind a tab has no box to
+       drop on. */
+    await drag('#panetab-fx-wide', '#pane-fx-plot .panebody');
+
+    const behind = await page.evaluate(async () =>
+    {
+        const scroller = document.getElementById('fx-scroll');
+        const wait = () => new Promise((go) => setTimeout(go, 150));
+
+        scroller.scrollLeft = 300;
+
+        const was = scroller.scrollLeft;
+
+        document.getElementById('panetab-fx-paint').click();
+        await wait();
+
+        /* That it really went behind one, so that a tab strip which
+           quietly stopped switching could not pass this. */
+        const gone = !document.getElementById('pane-fx-wide').checkVisibility();
+
+        document.getElementById('panetab-fx-wide').click();
+        await wait();
+
+        return { was, gone, now: scroller.scrollLeft };
+    });
+
+    check(behind.was > 0 && behind.gone && behind.now === behind.was,
+          'and a pane raised back from behind a tab is scrolled where it ' +
+          `was: ${behind.was} then ${behind.now}`);
+
     /* ---- the dividers ---- */
 
     await page.keyboard.press('Alt+Digit0');
