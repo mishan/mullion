@@ -46,7 +46,9 @@ jobs:
           </html>
           HTML
 
-      - uses: actions/configure-pages@v5
+      # No configure-pages step: it exists to hand a base path and an
+      # origin to a site generator that has to bake them in, and this
+      # site is files laid out the way the repository lays them out.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
