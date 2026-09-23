@@ -197,12 +197,35 @@ try
               () => document.getElementById('root').children.length === 0),
           'and the tiler has nothing left in it');
 
-    /* ---- a pane nobody is looking at ---- */
-
     await page.setViewportSize(WIDE);
     await page.waitForFunction(
         () => document.body.classList.contains('tiled'));
     await page.waitForTimeout(200);
+
+    /* ---- the accent ---- */
+
+    /* The demo maps no colors, so the selected tab is drawn in the
+       fallback: the page's own accent, as a slider on it would be. */
+    const accent = await page.evaluate(() =>
+    {
+        const probe = document.createElement('i');
+
+        probe.style.color = 'AccentColor';
+        document.body.append(probe);
+
+        const want = getComputedStyle(probe).color;
+        const tab = document.querySelector(
+            '.panetabwrap:has(> .panetab[aria-selected="true"])');
+
+        probe.remove();
+
+        return { want, got: getComputedStyle(tab).borderBottomColor };
+    });
+
+    check(accent.got === accent.want,
+          `a selected tab is underlined in AccentColor: ${accent.got}`);
+
+    /* ---- a pane nobody is looking at ---- */
 
     check(await page.evaluate(() => window.tiler.drawing().paint) &&
           await page.evaluate(() => window.tiler.drawing().plot),
