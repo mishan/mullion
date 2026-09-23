@@ -422,16 +422,18 @@ body.tiled .panebody { container-type: inline-size; }
  * Over every pane: where a popover goes, now that the pane it belongs
  * beside is a box that scrolls and would clip it.
  *
- * Absolute at the document's origin and of no size, so an absolutely
- * positioned child of it resolves against the same containing block the
- * body gave it -- which is what lets a page go on placing these
- * in page coordinates exactly as it did before there was a layout.
+ * Absolute at the document's origin, so a page goes on placing these in
+ * page coordinates exactly as it did before there was a layout. Being
+ * positioned makes it the containing block of everything in it, and so
+ * it is as wide as the one the body gave them: a box of no width is a
+ * popover with no room, every word of it on a line of its own. No
+ * height, so it lies over nothing a pointer is aiming at.
  */
 .paneoverlay
 {
     position: absolute;
     top: 0;
     left: 0;
-    width: 0;
+    width: 100%;
     height: 0;
 }

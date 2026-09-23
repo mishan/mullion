@@ -181,9 +181,9 @@ keyboard appears — should set this instead.
 ## Popovers
 
 A pane is a box that scrolls, so a popover inside one is clipped by it.
-`overlay()` returns an element over every pane, at the document's origin
-and of no size, so an absolutely positioned child of it resolves against
-the containing block the body would have given it:
+`overlay()` returns an element over every pane, at the document's origin,
+as wide as the body's containing block and of no height, so an absolutely
+positioned child of it is placed and sized as it would be in the body:
 
 ```js
 import { placePopover } from 'mullion/popover.js';

@@ -39,6 +39,13 @@ export function placePopover (box, x, y)
 
     box.hidden = false;
 
+    /* Measured at the left of the window rather than wherever it was
+       last: a box already against the right edge has only the room to
+       its right to be as wide as, and would be measured narrow and
+       placed narrow. */
+    box.style.left = `${scrollX}px`;
+    box.style.top = `${scrollY}px`;
+
     const left = Math.max(scrollX + pad,
                           Math.min(x, scrollX + innerWidth -
                                       box.offsetWidth - pad));

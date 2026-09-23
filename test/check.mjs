@@ -540,6 +540,36 @@ try
     check(await leafOf('fx-doc') !== docLeaf,
           'Alt Shift and an arrow moves the pane rather than the focus');
 
+    /* And from a tab in a leaf of two, which is where the focus is after
+       every chord. The tab answers plain arrows itself, and a tab that
+       answered the chord as well would raise its neighbor before the
+       chord asked which pane is in front. */
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+    await drag('#panetab-fx-doc', '#pane-fx-paint .panebody');
+    await page.click('#panetab-fx-doc');
+
+    const leftOf = (id) => page.evaluate((which) =>
+        document.getElementById(`pane-${which}`).closest('.paneleaf')
+                .getBoundingClientRect().left, id);
+
+    await page.keyboard.press('Alt+ArrowRight');
+    await page.waitForTimeout(150);
+
+    check(await page.evaluate(() =>
+              document.getElementById('panetab-fx-doc')
+                      .getAttribute('aria-selected') === 'true'),
+          'and Alt and an arrow from a tab leaves the tab in front of its ' +
+          'leaf where it was');
+
+    await page.click('#panetab-fx-doc');
+    await page.keyboard.press('Alt+Shift+ArrowRight');
+    await page.waitForTimeout(150);
+
+    check(await leftOf('fx-doc') > await leftOf('fx-paint'),
+          'and Alt Shift and an arrow from a tab moves that tab\'s pane, ' +
+          'not its neighbor');
+
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
     await page.click('#panetab-fx-paint');
@@ -576,6 +606,18 @@ try
 
     check(await leafCount() > 1, 'and again puts the rest back');
 
+    /* A pane asked for by name is a pane in front of somebody, which a
+       zoom on some other leaf would leave drawn and not shown. */
+    await page.click('#panetab-fx-paint');
+    await page.keyboard.press('Alt+Enter');
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.tiler.pane('present', 'fx-list'));
+    await page.waitForTimeout(100);
+
+    check(await page.evaluate(() => window.tiler.pane('visible', 'fx-list')) &&
+          await leafCount() > 1,
+          'and a pane presented while another is zoomed is on the screen');
+
     await page.click('#panetab-fx-list');
     await page.keyboard.press('Alt+KeyW');
     await page.waitForTimeout(200);
@@ -584,6 +626,20 @@ try
               [...document.querySelectorAll('.paneclosed')]
                   .some((b) => b.textContent === 'List')),
           'Alt W closes a pane to the drawer');
+
+    check(await page.evaluate(() =>
+              document.activeElement.classList.contains('panetab')),
+          'and leaves the focus on a tab rather than on the page: ' +
+          await page.evaluate(() => document.activeElement.id ||
+                                    document.activeElement.tagName));
+
+    /* A closed pane's button dragged and let go over nothing is a drag
+       that went nowhere, and not a click that reopens it. */
+    await drag('#panereopen-fx-list', '.chrome h1');
+
+    check(await page.evaluate(() =>
+              document.getElementById('panereopen-fx-list') !== null),
+          'and a closed pane dragged out and dropped on nothing stays closed');
 
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
@@ -616,6 +672,58 @@ try
     check(JSON.stringify(await page.evaluate(() => window.tiler.layout())) ===
               JSON.stringify(kept),
           'a reload opens on the layout somebody left');
+
+    /* What somebody left can be nothing at all, and nothing is not a
+       reason to open on every pane stacked in one leaf. */
+    const reload = async () =>
+    {
+        await page.reload();
+        await page.waitForFunction(
+            () => window.tiler !== undefined &&
+                  document.body.classList.contains('tiled'));
+    };
+
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+
+    const opening = JSON.stringify(
+        await page.evaluate(() => window.tiler.layout()));
+
+    await page.evaluate(() =>
+    {
+        for (const id of window.tiler.panes())
+            window.tiler.pane('close', id);
+    });
+    await reload();
+
+    check(JSON.stringify(await page.evaluate(() => window.tiler.layout())) ===
+              opening,
+          'and a layout with every pane closed opens on the page\'s default');
+
+    /* And a saved layout is somebody else's writing: a pane named in two
+       leaves is in the first, and a front tab that is not an index is
+       not a layout. */
+    await page.evaluate(() => localStorage.setItem('mullion-demo:one',
+        JSON.stringify({ dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['fx-doc', 'fx-paint'], active: 1 },
+            { tabs: ['fx-doc', 'fx-list'] }] })));
+    await reload();
+
+    check(await page.evaluate(() =>
+              document.querySelectorAll('.panetab').length ===
+                  new Set([...document.querySelectorAll('.panetab')]
+                              .map((t) => t.id)).size &&
+              JSON.stringify(window.tiler.layout().kids[1].tabs) ===
+                  '["fx-list"]'),
+          'and a pane a saved layout names twice is in one leaf');
+
+    await page.evaluate(() => localStorage.setItem('mullion-demo:one',
+        JSON.stringify({ tabs: ['fx-doc', 'fx-paint'], active: 'x' })));
+    await reload();
+
+    check(JSON.stringify(await page.evaluate(() => window.tiler.layout())) ===
+              opening,
+          'and one whose front tab is not an index is the default');
 
     /* ---- the mode is availability, not the layout ---- */
 
@@ -729,6 +837,14 @@ try
         s.scrollLeft = s.scrollWidth;
     });
     await page.waitForTimeout(100);
+
+    /* A sentence, not a word: a popover has to be given the room to be
+       as wide as what is in it. */
+    await page.evaluate(() =>
+    {
+        document.getElementById('fx-menu').textContent =
+            'A popover with a sentence in it, long enough to need a line.';
+    });
     await page.click('#fx-pop');
     await page.waitForFunction(
         () => !document.getElementById('fx-menu').hidden);
@@ -746,6 +862,12 @@ try
           'and is held inside the window, edge to edge: ' +
           `${Math.round(where.left)}-${Math.round(where.right)} ` +
           `of ${where.w}`);
+
+    const menuWide = await page.evaluate(
+        () => document.getElementById('fx-menu').offsetWidth);
+
+    check(menuWide > 200,
+          `and is as wide as what is in it, not one word to a line: ${menuWide}px`);
 
     /* ---- and what it was told rather than decided ---- */
 
@@ -849,6 +971,71 @@ try
           !told.back.tiled && told.afterDead === 0,
           'and destroy() puts the document back and stops answering: ' +
           JSON.stringify(told.back));
+
+    /* An id is the page's to choose, and a `.' or a `:' in one is part of
+       a name and not of a selector. */
+    const odd = await page.evaluate(async () =>
+    {
+        const { createPanes } = await import('../src/panes.js');
+        const root = document.createElement('div');
+
+        const box = (id, min) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneTitle = id;
+            el.dataset.paneMin = min;
+
+            return el;
+        };
+
+        document.body.append(root, box('odd:one.x', '0'),
+                             box('odd-two', '80'));
+
+        const three = createPanes({
+            root,
+            catalog: ['odd:one.x', 'odd-two'],
+            mode: 'only',
+            layouts: { only: { dir: 'row', size: [0.5, 0.5],
+                               kids: [{ tabs: ['odd:one.x'] },
+                                      { tabs: ['odd-two'] }] } },
+            on: true,
+            storage: { getItem: () => null, setItem: () => {},
+                       removeItem: () => {} },
+        });
+
+        const floor = document.getElementById('pane-odd:one.x')
+                              .closest('.paneleaf').style.minWidth;
+
+        document.getElementById('odd-two').querySelector('*')?.focus();
+        three.present('odd:one.x');
+
+        const presented = document.activeElement.id;
+
+        document.getElementById('paneshut-odd:one.x').click();
+
+        const shut = document.activeElement.id;
+        const mine = document.createElement('div');
+
+        three.overlay().append(mine);
+        three.destroy();
+
+        return { floor, presented, shut,
+                 handed: mine.parentElement === document.body };
+    });
+
+    check(odd.presented === 'panetab-odd:one.x' &&
+          odd.shut === 'panereopen-odd:one.x',
+          'and a pane whose id is not a selector still takes the focus: ' +
+          `${odd.presented}, ${odd.shut}`);
+
+    check(odd.floor === '0px',
+          `and a floor of nothing is a floor: ${odd.floor}`);
+
+    check(odd.handed,
+          'and destroy() hands back what the page put in the overlay');
 }
 catch (e)
 {
