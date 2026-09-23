@@ -904,6 +904,44 @@ export function createPanes ({ root, catalog, layouts, mode,
             ? standIn(liveKids(node)[0])
             : elementFor(node);
 
+    /*
+     * Moved, and not taken out and put back, where the browser can.
+     *
+     * Some moves are real ones. A split that loses its last pane but one
+     * collapses, and the box that is left goes up a level into the split
+     * above -- and an ordinary insert is a removal and an insertion, so
+     * an <iframe> in it loads again and a box in it is scrolled to the
+     * top. `moveBefore' is a move the document keeps state through.
+     * Both ends have to be in the document for it, which every render
+     * here already sees to; anything else is an ordinary insert.
+     */
+    const place = (parent, child, before = null) =>
+    {
+        if (parent.moveBefore !== undefined && parent.isConnected &&
+            child.isConnected)
+        {
+            try
+            {
+                parent.moveBefore(child, before);
+                return;
+            }
+            catch
+            {
+                /* A move the browser will not make whole is an ordinary
+                   one, which is what there was before. */
+            }
+        }
+
+        parent.insertBefore(child, before);
+    };
+
+    /* What each render's arranging left over, with the box it was left
+       in. Taken out at the end of the render and not as it is found: a
+       box that is going can still hold a pane that is not -- a closed
+       one, on its way to `keep' -- and a pane moved out of a box still
+       in the document is moved, where one taken out with it is not. */
+    let stale = [];
+
     /* The children a box is to have, in that order, with nothing left
        after them -- and anything already where it belongs left alone,
        which is the point of the whole arrangement: moving an element is
@@ -913,11 +951,11 @@ export function createPanes ({ root, catalog, layouts, mode,
         kids.forEach((kid, i) =>
         {
             if (box.children[i] !== kid)
-                box.insertBefore(kid, box.children[i] ?? null);
+                place(box, kid, box.children[i] ?? null);
         });
 
-        while (box.children.length > kids.length)
-            box.lastElementChild.remove();
+        for (const extra of [...box.children].slice(kids.length))
+            stale.push([box, extra]);
     };
 
     /* A leaf: a strip of tabs and a host per pane, with the one in front
@@ -999,7 +1037,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             attached.add(id);
 
             if (host.parentElement !== box)
-                box.append(host);
+                place(box, host);
 
             wrap.append(tab, shut);
             wraps.push(wrap);
@@ -1419,6 +1457,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         attached = new Set();
         seen = new Map();
         hint = null;
+        stale = [];
         inLayout = holding(tree);
 
         const out = closed();
@@ -1469,8 +1508,18 @@ export function createPanes ({ root, catalog, layouts, mode,
                 p.host.hidden = true;
 
                 if (p.host.parentElement !== keep)
-                    keep.append(p.host);
+                    place(keep, p.host);
             }
+
+        /* And now what was left over, which by here holds nothing
+           anybody still wants. Only where it still is: whatever a later
+           arranging took from where it had been left is somebody's
+           child again. */
+        for (const [box, extra] of stale)
+            if (extra.parentElement === box)
+                extra.remove();
+
+        stale = [];
 
         /* A leaf that went away takes the focus with it: a split that
            collapsed is not a place to put the next pane into. */

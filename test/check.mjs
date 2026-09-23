@@ -336,6 +336,73 @@ try
           'and a pane raised back from behind a tab is scrolled where it ' +
           `was: ${behind.was} then ${behind.now}`);
 
+    /* And a pane that did move, because the split it was in went away
+       around it: closing the last pane but one of a column puts the
+       other up a level, into the row. That is a move and not a render
+       being careless, and where the browser has `moveBefore' it keeps
+       what it is doing -- as does the pane just closed, which goes to
+       the drawer by way of a box that is going. What it keeps is its
+       <iframe>: a box moved into or out of one that is not drawn is
+       scrolled to the start in Chromium however it is moved, and a
+       closed pane lost its scrolling before `moveBefore' as well. */
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+
+    const collapsed = await page.evaluate(async () =>
+    {
+        if (Element.prototype.moveBefore === undefined)
+            return null;
+
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const loads = { list: 0, wide: 0 };
+        const frames = Object.keys(loads).map((id) =>
+        {
+            const frame = document.createElement('iframe');
+
+            frame.src = 'about:blank';
+            frame.addEventListener('load', () => { loads[id]++; });
+            document.getElementById(`fx-${id}`).append(frame);
+
+            return frame;
+        });
+
+        await wait(200);
+
+        const was = { ...loads,
+                      box: document.getElementById('pane-fx-list')
+                                   .closest('.paneleaf').parentElement };
+
+        window.tiler.pane('close', 'fx-plot');
+        window.tiler.pane('close', 'fx-wide');
+        await wait(300);
+
+        const up = document.getElementById('pane-fx-list')
+                           .closest('.paneleaf').parentElement !== was.box;
+
+        document.getElementById('panereopen-fx-wide').click();
+        await wait(150);
+
+        frames.forEach((frame) => frame.remove());
+
+        return { was: { list: was.list, wide: was.wide },
+                 now: { ...loads, up } };
+    });
+
+    if (collapsed === null)
+        process.stdout.write('skip  a pane moved by a collapse keeps its ' +
+                             '<iframe>: no moveBefore here\n');
+    else
+    {
+        check(collapsed.now.up && collapsed.now.list === collapsed.was.list,
+              'and a pane a collapsing split moves up a level does not load ' +
+              `its <iframe> again: ${collapsed.was.list} then ` +
+              `${collapsed.now.list}`);
+
+        check(collapsed.now.wide === collapsed.was.wide,
+              'and nor does the pane closed on the way, or reopened: ' +
+              `${collapsed.was.wide} then ${collapsed.now.wide}`);
+    }
+
     /* ---- the dividers ---- */
 
     await page.keyboard.press('Alt+Digit0');
