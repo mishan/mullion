@@ -5,7 +5,7 @@
 A tiling layout for a page you already have.
 
 A mullion is the bar that divides a window into panes. This is that, for
-the web: splits, dividers, tabs, a drawer and a keyboard, over a document
+the web: splits, dividers, tabs, a drawer and key bindings, over a document
 somebody else wrote.
 
 ![A tab dragged onto a pane to stack it, onto an edge to split, and onto the drawer to close it](https://raw.githubusercontent.com/mishan/mullion/main/demo/mullion.gif)
