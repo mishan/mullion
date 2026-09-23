@@ -31,6 +31,13 @@
  * a page that has a `--line' meaning something else would get a layout
  * quietly wearing the wrong color, which is the failure nobody
  * investigates.
+ *
+ * The one without a fixed fallback is `--pane-held', the color a
+ * selected tab, a divider under the pointer and a drop target are drawn
+ * in. Unmapped, it is `AccentColor': whatever the page's own sliders and
+ * checkboxes are drawn in, which is the system's accent where the
+ * browser exposes it -- an installed app, say -- and the browser's own
+ * where it does not. A page that maps it keeps its own.
  */
 
 /* The element the page hands to createPanes, which puts this class on it
@@ -133,7 +140,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 .panesplit:hover::after, .panesplit:focus-visible::after
 {
-    background: var(--pane-held, #5050ff);
+    background: var(--pane-held, AccentColor);
 }
 
 .panesplit:focus-visible { outline: none; }
@@ -255,7 +262,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 .panetabwrap:has(> .panetab[aria-selected="true"])
 {
     background: var(--pane-bg, #ffffff);
-    border-bottom-color: var(--pane-held, #5050ff);
+    border-bottom-color: var(--pane-held, AccentColor);
 }
 
 .panetab
@@ -427,8 +434,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     position: absolute;
     z-index: 3;
     pointer-events: none;
-    background: color-mix(in srgb, var(--pane-held, #5050ff) 20%, transparent);
-    border: 2px solid var(--pane-held, #5050ff);
+    background: color-mix(in srgb, var(--pane-held, AccentColor) 20%, transparent);
+    border: 2px solid var(--pane-held, AccentColor);
     border-radius: 4px;
 }
 

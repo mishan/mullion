@@ -174,6 +174,12 @@ so it stands alone and you can map your theme onto it:
 }
 ```
 
+`--pane-held` — the selected tab, a divider under the pointer, a drop
+target — defaults to `AccentColor`, the color the page's own sliders and
+checkboxes use. That is the system accent where the browser exposes it
+(an installed web app, for one) and the browser's default elsewhere. Map
+it, as above, to use your own instead.
+
 `--pane-height` is the layout's height, `100dvh` by default. A page that
 tracks `visualViewport` — because `dvh` is wrong the moment an on-screen
 keyboard appears — should set this instead.
