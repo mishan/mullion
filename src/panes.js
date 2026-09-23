@@ -244,10 +244,14 @@ export function createPanes ({ root, catalog, layouts, mode,
         const summary = el.tagName === 'DETAILS'
             ? el.querySelector(':scope > summary') : null;
 
+        /* A floor of nothing is a floor: `0' is a number the markup
+           said, and only a missing or unreadable one is the default. */
+        const floor = Number.parseFloat(el.dataset.paneMin);
+
         const p = {
             id, el, summary,
             title: el.dataset.paneTitle ?? summary?.textContent.trim() ?? id,
-            min: Number(el.dataset.paneMin) || 240,
+            min: floor >= 0 ? floor : 240,
 
             /* Where it came from. A remembered sibling is no address:
                the panes around this one are being moved too, so by the
@@ -433,7 +437,9 @@ export function createPanes ({ root, catalog, layouts, mode,
     const sane = (node) =>
         node !== null && typeof node === 'object' &&
         (Array.isArray(node.tabs)
-            ? node.tabs.every((id) => typeof id === 'string')
+            ? node.tabs.every((id) => typeof id === 'string') &&
+              (node.active === undefined ||
+               (Number.isInteger(node.active) && node.active >= 0))
             : ['row', 'col'].includes(node.dir) &&
               Array.isArray(node.kids) && node.kids.length > 1 &&
               Array.isArray(node.size) &&
@@ -443,12 +449,17 @@ export function createPanes ({ root, catalog, layouts, mode,
 
     /* And a pane this page has never heard of, dropped -- which is not an
        error and resets nothing. The other way round is the drawer: a pane
-       the layout has never seen is simply not in it. */
-    const known = (node) =>
+       the layout has never seen is simply not in it.
+
+       So is a pane named twice, after the first: it has one element, and
+       two leaves claiming it would pull its box back and forth between
+       them on every render, each tab controlling a panel the other has. */
+    const known = (node, taken = new Set()) =>
     {
         if (isLeaf(node))
         {
-            const tabs = node.tabs.filter((id) => panes.has(id));
+            const tabs = node.tabs.filter((id) =>
+                panes.has(id) && !taken.has(id) && taken.add(id));
 
             return tabs.length === 0 ? null
                  : { tabs,
@@ -459,7 +470,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         node.kids.forEach((k, i) =>
         {
-            const kept = known(k);
+            const kept = known(k, taken);
 
             if (kept !== null)
             {
@@ -504,11 +515,15 @@ export function createPanes ({ root, catalog, layouts, mode,
             saved = null;
         }
 
-        const from = saved !== null && sane(saved)
-            ? saved
-            : structuredClone(layouts?.[where] ?? { tabs: [...panes.keys()] });
+        /* A saved layout that keeps nothing -- every pane closed, or
+           every one it names gone from the page -- is no layout, and what
+           there is instead is the page's own default rather than every
+           pane stacked in one leaf. */
+        const fallback = () => known(
+            structuredClone(layouts?.[where] ?? { tabs: [...panes.keys()] }));
 
-        tree = known(from) ?? { tabs: [...panes.keys()] };
+        tree = (saved !== null && sane(saved) ? known(saved) : null) ??
+               fallback() ?? { tabs: [...panes.keys()] };
     };
 
     /* ---- moving a pane about ---- */
@@ -651,6 +666,19 @@ export function createPanes ({ root, catalog, layouts, mode,
         return (row ? rect.width : rect.height) >= want;
     };
 
+    /* A leaf about to be put in front of somebody, which a zoom on
+       another leaf would leave drawn and not shown. What was asked for
+       wins over what was zoomed. */
+    const unzoomFor = (leaf) =>
+    {
+        if (zoom !== null && zoom !== leaf)
+            zoom = null;
+    };
+
+    /* By id, whatever is in it: a pane's id is the page's, and a `.' or
+       a `:' in one is a class or a pseudo-class to a selector. */
+    const find = (id) => root.querySelector(`#${CSS.escape(id)}`);
+
     /* ---- dragging a tab ---- */
 
     /* Where a tab would land if it were let go here: a leaf to be moved
@@ -731,6 +759,9 @@ export function createPanes ({ root, catalog, layouts, mode,
     {
         tab.addEventListener('pointerdown', (e) =>
         {
+            if (e.button !== 0)
+                return;
+
             const from = { x: e.clientX, y: e.clientY };
             let dragging = false;
             let where = null;
@@ -762,7 +793,27 @@ export function createPanes ({ root, catalog, layouts, mode,
                 root.classList.remove('panedrag');
                 mark(null);
 
-                if (!dragging || where === null)
+                if (!dragging)
+                    return;
+
+                /* A drag is not a click, and the browser sends one
+                   anyway: let go anywhere that is not a drop and the
+                   button pressed is the button clicked, which raises a
+                   tab or reopens a closed pane nobody asked to reopen.
+                   Taken for this one click and no other -- where a drop
+                   does land the element is gone before it would come. */
+                const stop = (c) =>
+                {
+                    c.stopImmediatePropagation();
+                    c.preventDefault();
+                };
+
+                tab.addEventListener('click', stop,
+                                     { capture: true, once: true });
+                setTimeout(() =>
+                    tab.removeEventListener('click', stop, true), 0);
+
+                if (where === null)
                     return;
 
                 if (where.drop === 'drawer')
@@ -853,6 +904,52 @@ export function createPanes ({ root, catalog, layouts, mode,
             ? standIn(liveKids(node)[0])
             : elementFor(node);
 
+    /*
+     * Moved, and not taken out and put back, where the browser can.
+     *
+     * Some moves are real ones. A split that loses its last pane but one
+     * collapses, and the box that is left goes up a level into the split
+     * above -- and an ordinary insert is a removal and an insertion, so
+     * an <iframe> in it loads again and a box in it is scrolled to the
+     * top. `moveBefore' is a move the document keeps state through.
+     * Both ends have to be in the document for it, which every render
+     * here already sees to; anything else is an ordinary insert.
+     */
+    const place = (parent, child, before = null) =>
+    {
+        if (parent.moveBefore !== undefined && parent.isConnected &&
+            child.isConnected)
+        {
+            /* Style brought up to date first. Chromium's renderer has
+               crashed outright on a move into a box one of whose
+               children had just been taken out of the flow -- a pane
+               behind a tab, hidden a line earlier, is exactly that --
+               and a read of any computed style is enough to prevent
+               it. */
+            void getComputedStyle(parent).display;
+
+            try
+            {
+                parent.moveBefore(child, before);
+                return;
+            }
+            catch
+            {
+                /* A move the browser will not make whole is an ordinary
+                   one, which is what there was before. */
+            }
+        }
+
+        parent.insertBefore(child, before);
+    };
+
+    /* What each render's arranging left over, with the box it was left
+       in. Taken out at the end of the render and not as it is found: a
+       box that is going can still hold a pane that is not -- a closed
+       one, on its way to `keep' -- and a pane moved out of a box still
+       in the document is moved, where one taken out with it is not. */
+    let stale = [];
+
     /* The children a box is to have, in that order, with nothing left
        after them -- and anything already where it belongs left alone,
        which is the point of the whole arrangement: moving an element is
@@ -862,11 +959,11 @@ export function createPanes ({ root, catalog, layouts, mode,
         kids.forEach((kid, i) =>
         {
             if (box.children[i] !== kid)
-                box.insertBefore(kid, box.children[i] ?? null);
+                place(box, kid, box.children[i] ?? null);
         });
 
-        while (box.children.length > kids.length)
-            box.lastElementChild.remove();
+        for (const extra of [...box.children].slice(kids.length))
+            stale.push([box, extra]);
     };
 
     /* A leaf: a strip of tabs and a host per pane, with the one in front
@@ -948,7 +1045,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             attached.add(id);
 
             if (host.parentElement !== box)
-                box.append(host);
+                place(box, host);
 
             wrap.append(tab, shut);
             wraps.push(wrap);
@@ -978,7 +1075,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         focus = leaf;
         save();
         render();
-        root.querySelector(`#panereopen-${id}`)?.focus();
+        find(`panereopen-${id}`)?.focus();
     };
 
     /* The tab in front of a leaf, with the focus left where the person
@@ -993,13 +1090,20 @@ export function createPanes ({ root, catalog, layouts, mode,
         leaf.active = i;
         save();
         render();
-        root.querySelector(`#panetab-${id}`)?.focus();
+        find(`panetab-${id}`)?.focus();
     };
 
     /* Along the strip. Moving the focus moves the tab, which is what a
        tablist does when what a tab shows costs nothing to show. */
     const along = (e, leaf, ids, i) =>
     {
+        /* Plain keys only. The chords are the window's, and a tab that
+           answered Alt and an arrow as well would raise its neighbor
+           before the chord asked which pane is in front -- and the
+           chord would move that one. */
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
+            return;
+
         const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
         const to = e.key === 'Home' ? 0
                  : e.key === 'End' ? ids.length - 1
@@ -1154,7 +1258,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             e.preventDefault();
         });
 
-        /* Both sides of it, equal. */
+        /* Every share of the split it is in, equal. */
         bar.addEventListener('dblclick', () =>
         {
             const kids = liveKids(node);
@@ -1264,12 +1368,14 @@ export function createPanes ({ root, catalog, layouts, mode,
             button.addEventListener('click', () =>
             {
                 const back = home.get(id);
+                const to = back !== undefined && holds(back)
+                    ? back : focus ?? firstLeaf();
 
-                into(id, back !== undefined && holds(back)
-                             ? back : focus ?? firstLeaf());
+                into(id, to);
+                unzoomFor(to);
                 save();
                 render();
-                root.querySelector(`#panetab-${id}`)?.focus();
+                find(`panetab-${id}`)?.focus();
             });
 
             grab(button, id);
@@ -1311,7 +1417,8 @@ export function createPanes ({ root, catalog, layouts, mode,
        document. Out of the document they would be out of getElementById
        too, and a page that was handed its elements by name is a page a
        pane put away must not have been taken apart. One element, kept,
-       for the same reason as all the others. */
+       for the same reason as all the others -- and not drawn rather
+       than not displayed, which panes.css says why. */
     const keep = el('panekeep');
 
     /* And a leaf with nothing in it, for a layout every pane has been
@@ -1359,6 +1466,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         attached = new Set();
         seen = new Map();
         hint = null;
+        stale = [];
         inLayout = holding(tree);
 
         const out = closed();
@@ -1390,7 +1498,6 @@ export function createPanes ({ root, catalog, layouts, mode,
         made.style.removeProperty('flex-grow');
 
         blank.hidden = some;
-        keep.hidden = true;
         root.classList.toggle('panezoom', zoom !== null);
 
         /* The layout goes in before it is filled, so that every box takes
@@ -1409,8 +1516,31 @@ export function createPanes ({ root, catalog, layouts, mode,
                 p.host.hidden = true;
 
                 if (p.host.parentElement !== keep)
-                    keep.append(p.host);
+                    place(keep, p.host);
             }
+
+        /* And now what was left over, which by here holds nothing
+           anybody still wants. Only where it still is: whatever a later
+           arranging took from where it had been left is somebody's
+           child again. */
+        for (const [box, extra] of stale)
+            if (extra.parentElement === box)
+                extra.remove();
+
+        stale = [];
+
+        /* And every pane not on the screen laid out where it now is,
+           before it is left there. A pane hidden or moved while its
+           layout is out of date keeps that layout undone for as long as
+           it is not drawn, and Chromium lays it out from nothing when it
+           is shown again -- every scroller in it back at the start.
+           Asking the size of something inside it is what lays it out
+           now, while where it was scrolled to is still there to keep.
+           Asking the pane's own size is not: that is outside what is not
+           drawn, and answers without going in. */
+        for (const p of panes.values())
+            if (p.host !== null && p.host.hidden)
+                void p.host.firstElementChild.offsetWidth;
 
         /* A leaf that went away takes the focus with it: a split that
            collapsed is not a place to put the next pane into. */
@@ -1444,9 +1574,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         /* `||' and not `??': the first of these is `false' whenever the
            focus was not on a tab, and a nullish fallback does not fall
            through a `false'. */
-        const back = (tab !== null && root.querySelector(`#${tab}`)) ||
-                     (from !== null &&
-                      root.querySelector(`#panetab-${from}`));
+        const back = (tab !== null && find(tab)) ||
+                     (from !== null && find(`panetab-${from}`));
 
         if (back)
             back.focus();
@@ -1575,11 +1704,17 @@ export function createPanes ({ root, catalog, layouts, mode,
             const to = toward(leaf, way);
             const dir = way[0] !== 0 ? 'row' : 'col';
 
+            /* Off the edge is a split, and refused where a split is:
+               the same question the drop and the split chord ask. */
+            if (to === null && !splittable(leaf, id, dir))
+                return;
+
             if (to !== null)
                 into(id, to);
             else
                 beside(id, leaf, dir, way[0] + way[1] > 0);
 
+            unzoomFor(leafWith(id));
             done(leafWith(id) ?? leaf);
         }
         else if (keymap.splitRow.includes(e.code) ||
@@ -1611,7 +1746,12 @@ export function createPanes ({ root, catalog, layouts, mode,
         else if (keymap.close.includes(e.code))
         {
             drawer(id);
-            done(current());
+
+            /* Onto a leaf still in the tree: the one this was, if it
+               kept anything, or the first there is. A leaf that closed
+               with its last pane has no tab to be on, and the focus
+               would fall out to the top of the document. */
+            done(holds(leaf) ? leaf : firstLeaf());
         }
         else if (keymap.reset.includes(e.code))
         {
@@ -1714,9 +1854,10 @@ export function createPanes ({ root, catalog, layouts, mode,
            handle, the parameters of the thing under the pointer. A pane
            scrolls, and a popover inside a scroller is clipped by it.
          *
-           At the document's origin and of no size, so what is placed in
-           it is placed in page coordinates exactly as it was when the
-           body held it. */
+           At the document's origin, as wide as the body's containing
+           block and of no height, so what is placed in it is placed in
+           page coordinates, and given the room, exactly as it was when
+           the body held it. */
         overlay: () =>
         {
             if (above === null && !dead)
@@ -1771,11 +1912,12 @@ export function createPanes ({ root, catalog, layouts, mode,
                 leaf.active = liveTabs(leaf).indexOf(id);
 
             focus = leaf;
+            unzoomFor(leaf);
             save();
             render();
 
             if (take)
-                root.querySelector(`#panetab-${id}`)?.focus();
+                find(`panetab-${id}`)?.focus();
         },
 
         /* And put away, which is the drawer and not the bin. There is
@@ -1838,8 +1980,14 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             root.classList.remove('panesroot');
             root.style.removeProperty('--pane-split');
-            above?.remove();
-            above = null;
+            /* What the page put in the overlay is the page's, and goes
+               back to the body it came from rather than out with it. */
+            if (above !== null)
+            {
+                document.body.append(...above.children);
+                above.remove();
+                above = null;
+            }
         },
     };
 }
