@@ -1170,6 +1170,179 @@ try
 
     check(odd.handed,
           'and destroy() hands back what the page put in the overlay');
+
+    /* ---- a phone ----
+     *
+     * The options for a screen the defaults were not drawn for, a second
+     * set of layouts swapped in without taking the tiler down, and a
+     * divider dragged by a finger rather than a mouse -- which is a
+     * different gesture to the browser, and one it will take for a scroll
+     * if the element does not say otherwise.
+     */
+    {
+    const touch = await browser.newContext({ viewport: { width: 400, height: 800 },
+                                             hasTouch: true, isMobile: true });
+    const phone = await touch.newPage();
+
+    phone.on('pageerror', (e) => errors.push(e.message));
+    await phone.goto(`${base}?panes=0`);
+    await phone.waitForFunction(() => window.tiler !== undefined);
+
+    const narrow = await phone.evaluate(async () =>
+    {
+        const { createPanes } = await import('../src/panes.js');
+        const root = document.createElement('div');
+        const kept = new Map();
+
+        const box = (id) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneTitle = `a long title for ${id}`;
+            el.dataset.paneMin = '40';
+            el.style.height = '100%';
+
+            return el;
+        };
+
+        /* Over the demo, where a finger can reach it: the page's own
+           tiled body would otherwise squeeze it under the viewport. */
+        Object.assign(root.style, { position: 'fixed', inset: '0 0 auto 0',
+                                    height: '600px', zIndex: '10',
+                                    background: 'white' });
+        root.style.display = 'flex';
+        root.style.flexDirection = 'column';
+        document.body.append(root, box('ph-a'), box('ph-b'), box('ph-c'),
+                             box('ph-d'), box('ph-e'));
+
+        window.phonePanes = createPanes({
+            root,
+            catalog: ['ph-a', 'ph-b', 'ph-c', 'ph-d', 'ph-e'],
+            mode: 'm',
+            layouts: { m: { dir: 'col', size: [0.5, 0.5],
+                            kids: [{ tabs: ['ph-a', 'ph-b', 'ph-c', 'ph-d'] },
+                                   { tabs: ['ph-e'] }] } },
+            on: true, media: 'all', split: 18, param: 'phone',
+            strip: 'scroll', lone: false, closed: 'More:',
+            storage: { getItem: (k) => kept.get(k) ?? null,
+                       setItem: (k, v) => kept.set(k, v),
+                       removeItem: (k) => kept.delete(k) },
+        });
+
+        window.phoneKept = kept;
+
+        const strips = [...root.querySelectorAll('.paneleaf > .panetabs')];
+        const tabs = [...strips[0].querySelectorAll('.panetab')];
+
+        window.phonePanes.close('ph-d');
+
+        return {
+            scrolls: strips[0].scrollWidth > strips[0].clientWidth &&
+                     getComputedStyle(strips[0]).overflowX === 'auto',
+            whole: tabs.every((t) => t.scrollWidth <= t.clientWidth + 1),
+            alone: getComputedStyle(strips[1]).display === 'none',
+            label: root.querySelector('.panedrawerlabel')?.textContent,
+            action: getComputedStyle(root.querySelector('.panesplit'))
+                        .touchAction,
+        };
+    });
+
+    check(narrow.scrolls && narrow.whole,
+          'strip: "scroll" keeps every tab its own width, in a row that ' +
+          'scrolls');
+
+    check(narrow.alone,
+          'lone: false draws no strip over a leaf with one tab');
+
+    check(narrow.label === 'More:',
+          `closed labels the drawer: ${narrow.label}`);
+
+    check(narrow.action === 'none',
+          `a divider is a drag and not a scroll: touch-action ` +
+          `${narrow.action}`);
+
+    /* By a finger: pressed on the divider and moved 150 pixels up. */
+    const heightOf = () => phone.evaluate(() => Math.round(
+        document.getElementById('pane-ph-a').closest('.paneleaf')
+                .getBoundingClientRect().height));
+    const upper = await heightOf();
+    const bar = await phone.locator('.panesplit').last().boundingBox();
+    const cdp = await touch.newCDPSession(phone);
+    const x = bar.x + bar.width / 2;
+    const y = bar.y + bar.height / 2;
+
+    await cdp.send('Input.dispatchTouchEvent',
+                   { type: 'touchStart', touchPoints: [{ x, y }] });
+
+    for (let i = 1; i <= 15; i++)
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchMove',
+                         touchPoints: [{ x, y: y - i * 10 }] });
+
+    await cdp.send('Input.dispatchTouchEvent',
+                   { type: 'touchEnd', touchPoints: [] });
+    await phone.waitForTimeout(100);
+
+    const lower = await heightOf();
+
+    check(Math.abs(upper - lower - 150) <= 2,
+          `and a finger moves it as far as it moved: ${upper} to ${lower}`);
+
+    /* And the other shape's layouts, in place: the one that was up is
+       saved under its store, the new store's default comes up, and the
+       elements are the same ones -- nothing went back to the document on
+       the way. */
+    const swapped = await phone.evaluate(() =>
+    {
+        const a = document.getElementById('ph-a');
+        let moved = 0;
+        const watch = new MutationObserver((list) =>
+        {
+            for (const m of list)
+                for (const n of m.removedNodes)
+                    if (n === a)
+                        moved++;
+        });
+
+        watch.observe(document.body, { childList: true, subtree: true });
+
+        window.phonePanes.setLayouts(
+            { m: { tabs: ['ph-e', 'ph-a', 'ph-b', 'ph-c'] } },
+            { store: 'side', split: 30 });
+
+        const leaves = document.querySelectorAll('.paneleaf').length;
+        const front = document.querySelector(
+            '.panetab[aria-selected="true"]')?.id;
+
+        watch.disconnect();
+
+        window.phonePanes.setLayouts(
+            { m: { tabs: ['ph-a'] } }, { store: 'panes' });
+
+        const back = window.phonePanes.layout();
+
+        return { leaves, front, moved,
+                 saved: [...window.phoneKept.keys()].sort().join(' '),
+                 split: getComputedStyle(document.querySelector('.panesroot'))
+                            .getPropertyValue('--pane-split'),
+                 back: back.dir === 'col' && back.kids.length === 2 };
+    });
+
+    check(swapped.leaves === 1 && swapped.front === 'panetab-ph-e',
+          `setLayouts puts the new set's layout up: ${swapped.leaves} ` +
+          `leaf, ${swapped.front} in front`);
+
+    check(swapped.saved === 'panes:m side:m' && swapped.back,
+          'and each set is kept under its own store, the first coming ' +
+          `back as it was left: ${swapped.saved}`);
+
+    check(swapped.moved === 0,
+          'and no pane went back to the document on the way');
+
+    await touch.close();
+    }
 }
 catch (e)
 {

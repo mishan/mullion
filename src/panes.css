@@ -121,6 +121,12 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     background: transparent;
     border: 0;
     padding: 0;
+
+    /* A drag, not a scroll. Without it a finger moves the divider a few
+       pixels and the browser takes the rest of the gesture for itself,
+       cancelling the pointer -- the tabs had this and the divider did
+       not. */
+    touch-action: none;
 }
 
 .panebox[data-dir="row"] > .panesplit { cursor: col-resize; }
@@ -474,4 +480,29 @@ body.tiled .panebody { container-type: inline-size; }
     left: 0;
     width: 100%;
     height: 0;
+}
+
+/* ---- a narrow screen ----
+ *
+ * Two options for a screen the defaults were not drawn for (`strip' and
+ * `lone' in panes.js), each a class on the root.
+ *
+ * `strip: "scroll"': the tabs and the drawer keep their own widths in one
+ * row that scrolls sideways, rather than shrinking every name to fit.
+ */
+.panescroll .panetabs,
+.panescroll > .panedrawer
+{
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.panescroll .panetabwrap,
+.panescroll > .panedrawer > * { flex: 0 0 auto; }
+
+/* `lone: false': a leaf with one tab has no strip over it. */
+.panealone .paneleaf:has(> .panetabs > .panetabwrap:only-child) > .panetabs
+{
+    display: none;
 }

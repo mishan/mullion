@@ -141,10 +141,31 @@ Everything below is a default rather than a rule.
 | `param` | query parameter that forces it on or off | `'panes'` |
 | `storage` | where a layout is kept | `localStorage` |
 | `keys` | the commands, merged over the defaults | `Alt` chords |
+| `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
+| `lone` | whether a leaf with one tab has a tab strip | `true` |
+| `closed` | the drawer's label | `'Closed:'` |
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
-`layout()`, `overlay()`, `tiled()`, `destroy()`.
+`layout()`, `overlay()`, `tiled()`, `setLayouts(layouts, { store, split })`,
+`destroy()`.
+
+`setLayouts` swaps in another set of layouts without taking the tiler
+down: the layout that is up is saved under its store, and the mode's
+layout from the new set replaces it. It is for a page with more than one
+shape, such as a phone that has one layout upright and another on its
+side:
+
+```js
+const side = matchMedia('(orientation: landscape)');
+side.addEventListener('change', () =>
+  panes.setLayouts(side.matches ? SIDEWAYS : UPRIGHT,
+                   { store: side.matches ? 'app:side' : 'app:up' }));
+```
+
+On a touch screen, `strip: 'scroll'`, `lone: false` and a thicker `split`
+are the usual changes; with a `media` that admits a coarse pointer, the
+tiler runs there too.
 
 `destroy()` is the way back out: every pane under its own parent again,
 every listener off the window, and the page as it was found. A page that
@@ -179,6 +200,9 @@ target — defaults to `AccentColor`, the color the page's own sliders and
 checkboxes use. That is the system accent where the browser exposes it
 (an installed web app, for one) and the browser's default elsewhere. Map
 it, as above, to use your own instead.
+
+Your overrides go in a stylesheet loaded after `panes.css`: its selectors
+are ordinary class selectors, so at equal specificity the later rule wins.
 
 `--pane-height` is the layout's height, `100dvh` by default. A page that
 tracks `visualViewport` — because `dvh` is wrong the moment an on-screen
