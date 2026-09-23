@@ -164,8 +164,26 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
  * say what `hidden' means for it as well -- panes.js hides the pane
  * behind a tab and an empty drawer with the attribute, and without this
  * line both of them stay on the screen.
+ *
+ * A pane is not given `display: none', though, and that is on purpose.
+ * A box that is not displayed has no layout to keep, and Chromium starts
+ * every scroller in it at the beginning again the moment it is moved --
+ * and a pane behind a tab is moved whenever the split around its leaf
+ * collapses, and a closed one on its way to the drawer and back. So a
+ * hidden pane keeps its boxes and is not drawn: `content-visibility'
+ * skips what is in it, which also takes it out of the focus order and
+ * the accessibility tree, and it is lifted out of the flow and made
+ * invisible so that its own border does not show or take room from the
+ * one in front.
  */
-.pane[hidden], .panedrawer[hidden], .paneleaf[hidden] { display: none; }
+.panedrawer[hidden], .paneleaf[hidden] { display: none; }
+
+.pane[hidden]
+{
+    position: absolute;
+    visibility: hidden;
+    content-visibility: hidden;
+}
 
 /* What was a block in a document is a column in a pane: the box that
    wants the room takes it, and the rows around it keep their height.
@@ -389,6 +407,19 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
    meaningless where there is nothing to share with. */
 .panesroot.panezoom .panefront,
 .panesroot.panezoom .panebox:has(.panefront) { flex-grow: 1 !important; }
+
+/* Where the panes this render did not draw are kept: in the document,
+   so that getElementById still finds them, and not drawn, by the same
+   means and for the same reason as a pane behind a tab. */
+.panekeep
+{
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    content-visibility: hidden;
+}
 
 /* Where a dragged tab would land, over the pane it would land in. */
 .panedrop

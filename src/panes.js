@@ -920,6 +920,14 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (parent.moveBefore !== undefined && parent.isConnected &&
             child.isConnected)
         {
+            /* Style brought up to date first. Chromium's renderer has
+               crashed outright on a move into a box one of whose
+               children had just been taken out of the flow -- a pane
+               behind a tab, hidden a line earlier, is exactly that --
+               and a read of any computed style is enough to prevent
+               it. */
+            void getComputedStyle(parent).display;
+
             try
             {
                 parent.moveBefore(child, before);
@@ -1409,7 +1417,8 @@ export function createPanes ({ root, catalog, layouts, mode,
        document. Out of the document they would be out of getElementById
        too, and a page that was handed its elements by name is a page a
        pane put away must not have been taken apart. One element, kept,
-       for the same reason as all the others. */
+       for the same reason as all the others -- and not drawn rather
+       than not displayed, which panes.css says why. */
     const keep = el('panekeep');
 
     /* And a leaf with nothing in it, for a layout every pane has been
@@ -1489,7 +1498,6 @@ export function createPanes ({ root, catalog, layouts, mode,
         made.style.removeProperty('flex-grow');
 
         blank.hidden = some;
-        keep.hidden = true;
         root.classList.toggle('panezoom', zoom !== null);
 
         /* The layout goes in before it is filled, so that every box takes
@@ -1520,6 +1528,19 @@ export function createPanes ({ root, catalog, layouts, mode,
                 extra.remove();
 
         stale = [];
+
+        /* And every pane not on the screen laid out where it now is,
+           before it is left there. A pane hidden or moved while its
+           layout is out of date keeps that layout undone for as long as
+           it is not drawn, and Chromium lays it out from nothing when it
+           is shown again -- every scroller in it back at the start.
+           Asking the size of something inside it is what lays it out
+           now, while where it was scrolled to is still there to keep.
+           Asking the pane's own size is not: that is outside what is not
+           drawn, and answers without going in. */
+        for (const p of panes.values())
+            if (p.host !== null && p.host.hidden)
+                void p.host.firstElementChild.offsetWidth;
 
         /* A leaf that went away takes the focus with it: a split that
            collapsed is not a place to put the next pane into. */

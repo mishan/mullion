@@ -229,8 +229,8 @@ try
        flex }' with nothing said about `hidden' leaves the pane behind the
        tab on the screen, drawing nothing, under the one in front. */
     check(await page.evaluate(() =>
-              !document.getElementById('pane-fx-paint').checkVisibility() &&
-              document.getElementById('pane-fx-plot').checkVisibility()),
+              !document.getElementById('fx-paint').checkVisibility() &&
+              document.getElementById('fx-plot').checkVisibility()),
           'and the one behind is not on the screen, not merely not drawing');
 
     /* And the one behind really stops: a loop that was told and carried
@@ -324,7 +324,7 @@ try
 
         /* That it really went behind one, so that a tab strip which
            quietly stopped switching could not pass this. */
-        const gone = !document.getElementById('pane-fx-wide').checkVisibility();
+        const gone = !document.getElementById('fx-wide').checkVisibility();
 
         document.getElementById('panetab-fx-wide').click();
         await wait();
@@ -341,10 +341,11 @@ try
        other up a level, into the row. That is a move and not a render
        being careless, and where the browser has `moveBefore' it keeps
        what it is doing -- as does the pane just closed, which goes to
-       the drawer by way of a box that is going. What it keeps is its
-       <iframe>: a box moved into or out of one that is not drawn is
-       scrolled to the start in Chromium however it is moved, and a
-       closed pane lost its scrolling before `moveBefore' as well. */
+       the drawer by way of a box that is going. Its <iframe>, and where
+       it was scrolled to: a box moved into or out of one that is not
+       displayed is scrolled to the start in Chromium however it is
+       moved, which is why a pane put away is not drawn rather than not
+       displayed. */
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
 
@@ -368,7 +369,11 @@ try
 
         await wait(200);
 
-        const was = { ...loads,
+        const scroller = document.getElementById('fx-scroll');
+
+        scroller.scrollLeft = 250;
+
+        const was = { ...loads, scroll: scroller.scrollLeft,
                       box: document.getElementById('pane-fx-list')
                                    .closest('.paneleaf').parentElement };
 
@@ -382,10 +387,12 @@ try
         document.getElementById('panereopen-fx-wide').click();
         await wait(150);
 
+        const scroll = scroller.scrollLeft;
+
         frames.forEach((frame) => frame.remove());
 
-        return { was: { list: was.list, wide: was.wide },
-                 now: { ...loads, up } };
+        return { was: { list: was.list, wide: was.wide, scroll: was.scroll },
+                 now: { ...loads, up, scroll } };
     });
 
     if (collapsed === null)
@@ -401,6 +408,43 @@ try
         check(collapsed.now.wide === collapsed.was.wide,
               'and nor does the pane closed on the way, or reopened: ' +
               `${collapsed.was.wide} then ${collapsed.now.wide}`);
+
+        check(collapsed.was.scroll > 0 &&
+              collapsed.now.scroll === collapsed.was.scroll,
+              'and that pane is scrolled where it was when it comes back: ' +
+              `${collapsed.was.scroll} then ${collapsed.now.scroll}`);
+
+        /* And a pane behind a tab in the leaf that goes up a level,
+           which is moved with it and is not displayed either. */
+        await page.keyboard.press('Alt+Digit0');
+        await page.waitForTimeout(200);
+        await drag('#panetab-fx-wide', '#pane-fx-list .panebody');
+
+        const tucked = await page.evaluate(async () =>
+        {
+            const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+            const scroller = document.getElementById('fx-scroll');
+
+            scroller.scrollLeft = 350;
+
+            const was = scroller.scrollLeft;
+
+            document.getElementById('panetab-fx-list').click();
+            await wait(100);
+
+            const behind = !scroller.checkVisibility();
+
+            window.tiler.pane('close', 'fx-plot');
+            await wait(150);
+            document.getElementById('panetab-fx-wide').click();
+            await wait(150);
+
+            return { was, behind, now: scroller.scrollLeft };
+        });
+
+        check(tucked.was > 0 && tucked.behind && tucked.now === tucked.was,
+              'and a pane behind a tab in it is scrolled where it was: ' +
+              `${tucked.was} then ${tucked.now}`);
     }
 
     /* ---- the dividers ---- */
@@ -487,7 +531,7 @@ try
     await page.waitForTimeout(200);
 
     check(await page.evaluate(() =>
-              document.getElementById('pane-fx-list').checkVisibility() &&
+              document.getElementById('fx-list').checkVisibility() &&
               document.activeElement.id === 'panetab-fx-list'),
           'and the drawer button puts it back, in front and focused');
 
@@ -645,7 +689,7 @@ try
 
     check(await leafCount() === 1 &&
           await page.evaluate(() =>
-              document.getElementById('pane-fx-paint').checkVisibility()),
+              document.getElementById('fx-paint').checkVisibility()),
           'Alt Enter fills the layout with one pane and draws no others');
 
     /* And everything that left the screen was told so, which is the same
@@ -712,7 +756,7 @@ try
     await page.waitForTimeout(200);
 
     check(await page.evaluate(() =>
-              document.getElementById('pane-fx-list').checkVisibility()),
+              document.getElementById('fx-list').checkVisibility()),
           'and Alt 0 is the layout the page opens on');
 
     /* A chord typed into a text box is text. */
@@ -721,7 +765,7 @@ try
     await page.waitForTimeout(200);
 
     check(await page.evaluate(() =>
-              document.getElementById('pane-fx-doc').checkVisibility()),
+              document.getElementById('fx-doc').checkVisibility()),
           'and none of them fires while the focus is in a text box');
 
     /* ---- and it is remembered ---- */
@@ -796,7 +840,7 @@ try
 
     const onScreen = () => page.evaluate(() =>
         window.tiler.panes().filter(
-            (id) => document.getElementById(`pane-${id}`)?.checkVisibility()));
+            (id) => document.getElementById(id)?.checkVisibility()));
 
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
@@ -834,7 +878,7 @@ try
     await page.waitForTimeout(150);
 
     const seen = (id) => page.evaluate(
-        (w) => document.getElementById(`pane-${w}`).checkVisibility(), id);
+        (w) => document.getElementById(w).checkVisibility(), id);
 
     check(!await seen('fx-notes'),
           'a pane closed by name is put away');
