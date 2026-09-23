@@ -77,6 +77,13 @@ export interface PanesOptions {
   };
   /** The commands, merged over the defaults. */
   keys?: Partial<PaneKeys>;
+  /** How the tabs and the drawer take a row too narrow for them: shrunk
+   *  to fit, or at their own widths in a row that scrolls sideways. */
+  strip?: 'shrink' | 'scroll';
+  /** Whether a leaf with a single tab has a tab strip over it. */
+  lone?: boolean;
+  /** What the drawer of closed panes is labelled. */
+  closed?: string;
 }
 
 export interface PaneKeys {
@@ -118,6 +125,11 @@ export interface Panes {
   setTitle(id: string, text: string): void;
   /** Whether a layout is up at all. */
   tiled(): boolean;
+  /** Another set of layouts, in place: the layout that is up is saved
+   *  under its store, and the mode's layout from the new set replaces it.
+   *  Optionally a new store prefix and divider thickness. */
+  setLayouts(layouts: Record<string, PaneNode>,
+             opts?: { store?: string; split?: number }): void;
   /** Put every pane back under its own parent, take every listener off
    *  the window and the media query, and leave the page as it was found.
    *  Quiet if it has already been called; the handle does nothing after

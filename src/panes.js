@@ -158,7 +158,9 @@ export function createPanes ({ root, catalog, layouts, mode,
                                   read as one wherever it is passed. */
                                leaf: least = LEAF,
                                edge = EDGE, param = 'panes',
-                               storage = KEEP, keys = {} })
+                               storage = KEEP, keys = {},
+                               strip = 'shrink', lone = true,
+                               closed: label = 'Closed:' })
 {
     /* The commands, with a page's own over the defaults rather than
        instead of them: overriding the one chord that clashes should not
@@ -171,8 +173,19 @@ export function createPanes ({ root, catalog, layouts, mode,
        happened to choose was a stylesheet naming its one consumer. */
     root.classList.add('panesroot');
 
+    /* How the tabs and the drawer take a row too narrow for them: shrunk
+       to fit, every name cut short, or left their own widths in a row that
+       scrolls -- which is what a phone wants, where "Pian..." beside
+       "Cha..." names nothing. And whether a leaf with one tab still has a
+       strip over it: on a desktop that strip is the handle a pane is
+       dragged and closed by, on a phone a row of height spent saying
+       "Keys" over a keyboard. Classes on the root, so panes.css says what
+       each means. */
+    root.classList.toggle('panescroll', strip === 'scroll');
+    root.classList.toggle('panealone', !lone);
+
     /* And the one number the drawing and the arithmetic share, written
-       where the drawing can read it. */
+       where the drawing can read it, and written again by setLayouts. */
     root.style.setProperty('--pane-split', `${split}px`);
 
     /* Where a key means editing rather than a command: a chord typed
@@ -1352,7 +1365,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             const said = document.createElement('span');
 
             said.className = 'panedrawerlabel';
-            said.textContent = 'Closed:';
+            said.textContent = label;
             made.push(said);
         }
 
@@ -1948,6 +1961,38 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         tiled: () => tiled,
 
+        /* Another set of layouts, in place: the layout that is up is kept
+         * under the store it came from, and the mode's layout from the
+         * new set -- what was saved under the new store, or its default --
+         * replaces it. With a new divider thickness if one is given.
+         *
+         * For a page with more than one shape to be: a phone turned on
+         * its side has neither the height for the split it had upright
+         * nor any use for a tab strip across the short side. Without
+         * this it was destroy() and a second createPanes, and every pane
+         * put back into the document only to be adopted again.
+         */
+        setLayouts: (next, { store: to = store, split: thick = split } = {}) =>
+        {
+            if (dead)
+                return;
+
+            if (tree !== null && tiled)
+                save();
+
+            layouts = next;
+            store = to;
+            split = thick;
+            root.style.setProperty('--pane-split', `${split}px`);
+
+            zoom = null;
+            tree = null;
+            focus = null;
+
+            if (tiled)
+                render();
+        },
+
         /* Handed back: every pane under its own parent again, every
          * listener off whatever it was on, and the classes and the
          * overlay gone from the page.
@@ -1978,7 +2023,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             document.body.classList.remove('tiled');
             render();
 
-            root.classList.remove('panesroot');
+            root.classList.remove('panesroot', 'panescroll', 'panealone');
             root.style.removeProperty('--pane-split');
             /* What the page put in the overlay is the page's, and goes
                back to the body it came from rather than out with it. */

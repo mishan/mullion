@@ -37,6 +37,9 @@ const options: PanesOptions = {
     onShow: (id: string, on: boolean) => { void id; void on; },
     keys: { close: ['KeyW'] },
     storage: window.sessionStorage,
+    strip: 'scroll',
+    lone: false,
+    closed: 'More:',
 };
 
 const panes: Panes = createPanes(options);
@@ -46,6 +49,8 @@ panes.mode('default');
 panes.present('editor', { focus: false });
 panes.close('console');
 panes.setTitle('editor', 'notes.txt');
+panes.setLayouts({ default: { tabs: ['editor'] } },
+                 { store: 'side', split: 18 });
 panes.destroy();
 
 const answers: [boolean, boolean, PaneNode | null, HTMLElement] =
