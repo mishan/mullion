@@ -8,8 +8,9 @@
 /*
  * check.mjs -- mullion, in a browser.
  *
- *   npm install && npx playwright install chromium
- *   npm test
+ *   npm install && npx playwright install chromium firefox webkit
+ *   npm test                  # in Chromium
+ *   npm test -- firefox       # or firefox, or webkit
  *
  * Everything here runs against demo/index.html, which is the demo page
  * and nothing more: no build step, no bundler, no framework. What it
@@ -28,7 +29,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from 'playwright';
+import * as playwright from 'playwright';
 
 import { serve } from './serve.mjs';
 
@@ -38,6 +39,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
    under it: mullion asks for 60em and a pointer that is not a finger. */
 const WIDE = { width: 1400, height: 900 };
 const NARROW = { width: 560, height: 900 };
+
+/* Which browser. Chromium by default, and the others because the one
+   thing it does that they do not is `moveBefore': without it every
+   render that moves a pane is an ordinary insert, and that is the path
+   a page in Firefox or Safari takes. */
+const name = process.argv[2] ?? process.env.BROWSER ?? 'chromium';
+
+if (!['chromium', 'firefox', 'webkit'].includes(name))
+{
+    process.stderr.write(`no such browser: ${name}\n`);
+    process.exit(1);
+}
 
 let failures = 0;
 
@@ -52,11 +65,19 @@ function check (cond, what)
     }
 }
 
+/* A claim this browser has no way to test, said rather than passed. */
+function skip (what)
+{
+    process.stdout.write(`skip  ${what}\n`);
+}
+
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
 const errors = [];
 
-const browser = await chromium.launch();
+const browser = await playwright[name].launch();
+
+process.stdout.write(`in ${name} ${browser.version()}\n`);
 
 /* What the document is, pane by pane: where each one sits among its
    siblings, what is in it, and how it is folded. Taken with the tiler off
@@ -1180,8 +1201,11 @@ try
      * if the element does not say otherwise.
      */
     {
+    /* A phone, where the browser can be one: Firefox has no mobile
+       mode, and a touch screen at a phone's width is what it has. */
     const touch = await browser.newContext({ viewport: { width: 400, height: 800 },
-                                             hasTouch: true, isMobile: true });
+                                             hasTouch: true,
+                                             isMobile: name !== 'firefox' });
     const phone = await touch.newPage();
 
     phone.on('pageerror', (e) => errors.push(e.message));
@@ -1263,32 +1287,42 @@ try
           `a divider is a drag and not a scroll: touch-action ` +
           `${narrow.action}`);
 
-    /* By a finger: pressed on the divider and moved 150 pixels up. */
-    const heightOf = () => phone.evaluate(() => Math.round(
-        document.getElementById('pane-ph-a').closest('.paneleaf')
-                .getBoundingClientRect().height));
-    const upper = await heightOf();
-    const bar = await phone.locator('.panesplit').last().boundingBox();
-    const cdp = await touch.newCDPSession(phone);
-    const x = bar.x + bar.width / 2;
-    const y = bar.y + bar.height / 2;
+    /* By a finger: pressed on the divider and moved 150 pixels up.
+       Only Chromium can be told to move one -- Playwright's touch
+       screen taps and does nothing else -- so elsewhere it is said and
+       not tested. */
+    if (name !== 'chromium')
+        skip('and a finger moves it as far as it moved: no touch drag ' +
+             `in ${name}`);
+    else
+    {
+        const heightOf = () => phone.evaluate(() => Math.round(
+            document.getElementById('pane-ph-a').closest('.paneleaf')
+                    .getBoundingClientRect().height));
+        const upper = await heightOf();
+        const bar = await phone.locator('.panesplit').last().boundingBox();
+        const cdp = await touch.newCDPSession(phone);
+        const x = bar.x + bar.width / 2;
+        const y = bar.y + bar.height / 2;
 
-    await cdp.send('Input.dispatchTouchEvent',
-                   { type: 'touchStart', touchPoints: [{ x, y }] });
-
-    for (let i = 1; i <= 15; i++)
         await cdp.send('Input.dispatchTouchEvent',
-                       { type: 'touchMove',
-                         touchPoints: [{ x, y: y - i * 10 }] });
+                       { type: 'touchStart', touchPoints: [{ x, y }] });
 
-    await cdp.send('Input.dispatchTouchEvent',
-                   { type: 'touchEnd', touchPoints: [] });
-    await phone.waitForTimeout(100);
+        for (let i = 1; i <= 15; i++)
+            await cdp.send('Input.dispatchTouchEvent',
+                           { type: 'touchMove',
+                             touchPoints: [{ x, y: y - i * 10 }] });
 
-    const lower = await heightOf();
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchEnd', touchPoints: [] });
+        await phone.waitForTimeout(100);
 
-    check(Math.abs(upper - lower - 150) <= 2,
-          `and a finger moves it as far as it moved: ${upper} to ${lower}`);
+        const lower = await heightOf();
+
+        check(Math.abs(upper - lower - 150) <= 2,
+              'and a finger moves it as far as it moved: ' +
+              `${upper} to ${lower}`);
+    }
 
     /* And the other shape's layouts, in place: the one that was up is
        saved under its store, the new store's default comes up, and the
