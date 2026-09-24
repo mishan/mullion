@@ -13,15 +13,15 @@
  *
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
- * not a still of the result. This drives demo/index.html the way a person
- * would -- split, stack, close, reopen, zoom -- and writes:
+ * not a still of the result. This drives test/fixture/index.html the
+ * way a person would -- split, stack, close, reopen, zoom -- and writes:
  *
  *   demo/mullion.gif   the loop the README shows
  *   demo/mullion.png   a still of the layout, for anywhere a gif is wrong
  *
  * The pointer is drawn by this file and not by the browser: a recording
  * of a drag with no cursor in it is a layout rearranging itself for no
- * reason. It is the only thing here the demo page does not already do.
+ * reason. It is the only thing here the page does not already do.
  */
 
 import fs from 'node:fs/promises';
@@ -74,7 +74,7 @@ const CURSOR = () =>
 };
 
 const site = await serve(path.join(here, '..'));
-const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
+const base = `http://127.0.0.1:${site.address().port}/test/fixture/index.html`;
 const films = await fs.mkdtemp(path.join(os.tmpdir(), 'mullion-'));
 const browser = await chromium.launch();
 

@@ -24,6 +24,7 @@
   "scripts": {
     "prepublishOnly": "npm run types && npm test",
     "test": "node test/check.mjs",
+    "test:demo": "node test/demo.mjs",
     "types": "tsc",
     "demo": "node test/serve.mjs",
     "shot": "node tools/shot.mjs"

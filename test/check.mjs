@@ -12,7 +12,7 @@
  *   npm test                  # in Chromium
  *   npm test -- firefox       # or firefox, or webkit
  *
- * Everything here runs against demo/index.html, which is the demo page
+ * Everything here runs against test/fixture/index.html, which is a page
  * and nothing more: no build step, no bundler, no framework. What it
  * proves about a document it proves about any document.
  *
@@ -72,7 +72,7 @@ function skip (what)
 }
 
 const site = await serve(path.join(here, '..'));
-const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
+const base = `http://127.0.0.1:${site.address().port}/test/fixture/index.html`;
 const errors = [];
 
 const browser = await playwright[name].launch();
@@ -225,7 +225,7 @@ try
 
     /* ---- the accent ---- */
 
-    /* The demo maps no colors, so the selected tab is drawn in the
+    /* The fixture maps no colors, so the selected tab is drawn in the
        fallback: the page's own accent, as a slider on it would be. */
     const accent = await page.evaluate(() =>
     {
@@ -857,7 +857,7 @@ try
     /* And a saved layout is somebody else's writing: a pane named in two
        leaves is in the first, and a front tab that is not an index is
        not a layout. */
-    await page.evaluate(() => localStorage.setItem('mullion-demo:one',
+    await page.evaluate(() => localStorage.setItem('mullion-fixture:one',
         JSON.stringify({ dir: 'row', size: [0.5, 0.5], kids: [
             { tabs: ['fx-doc', 'fx-paint'], active: 1 },
             { tabs: ['fx-doc', 'fx-list'] }] })));
@@ -871,7 +871,7 @@ try
                   '["fx-list"]'),
           'and a pane a saved layout names twice is in one leaf');
 
-    await page.evaluate(() => localStorage.setItem('mullion-demo:one',
+    await page.evaluate(() => localStorage.setItem('mullion-fixture:one',
         JSON.stringify({ tabs: ['fx-doc', 'fx-paint'], active: 'x' })));
     await reload();
 
@@ -1033,7 +1033,7 @@ try
      */
     const told = await page.evaluate(async () =>
     {
-        const { createPanes } = await import('../src/panes.js');
+        const { createPanes } = await import('../../src/panes.js');
         const root = document.createElement('div');
         const saved = [];
 
@@ -1130,7 +1130,7 @@ try
        a name and not of a selector. */
     const odd = await page.evaluate(async () =>
     {
-        const { createPanes } = await import('../src/panes.js');
+        const { createPanes } = await import('../../src/panes.js');
         const root = document.createElement('div');
 
         const box = (id, min) =>
@@ -1213,7 +1213,7 @@ try
 
     const narrow = await phone.evaluate(async () =>
     {
-        const { createPanes } = await import('../src/panes.js');
+        const { createPanes } = await import('../../src/panes.js');
         const root = document.createElement('div');
         const kept = new Map();
 
@@ -1232,7 +1232,7 @@ try
             return el;
         };
 
-        /* Over the demo, where a finger can reach it: the page's own
+        /* Over the fixture, where a finger can reach it: the page's own
            tiled body would otherwise squeeze it under the viewport. */
         Object.assign(root.style, { position: 'fixed', inset: '0 0 auto 0',
                                     height: '600px', zIndex: '10',
@@ -1478,7 +1478,7 @@ try
 
     const told = await own.evaluate(async () =>
     {
-        const { createPanes } = await import('../src/panes.js');
+        const { createPanes } = await import('../../src/panes.js');
         const wait = (ms) => new Promise((go) => setTimeout(go, ms));
         const root = document.createElement('div');
         const heard = [];
