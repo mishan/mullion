@@ -353,7 +353,32 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     touch-action: none;
 }
 
-.paneclosed:hover, .panetab:hover { color: var(--pane-fg, #202020); }
+/* The reset, at the far end of the first strip (or of the drawer's row),
+   drawn as a button rather than as a tab or a closed pane. */
+.panereset
+{
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    padding: 0 0.3em;
+}
+
+.panereset > button
+{
+    padding: 0.1em 0.5em;
+    font: inherit;
+    font-size: 0.85em;
+    color: var(--pane-dim, #666666);
+    background: none;
+    border: 1px solid var(--pane-line, #dcdcdc);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.paneclosed:hover, .panetab:hover, .panereset > button:hover
+{
+    color: var(--pane-fg, #202020);
+}
 
 /*
  * The drawer while a tab is in the air.
@@ -501,8 +526,19 @@ body.tiled .panebody { container-type: inline-size; }
 .panescroll .panetabwrap,
 .panescroll > .panedrawer > * { flex: 0 0 auto; }
 
-/* `lone: false': a leaf with one tab has no strip over it. */
-.panealone .paneleaf:has(> .panetabs > .panetabwrap:only-child) > .panetabs
+/* And the reset kept at the row's right edge while the tabs or closed
+   panes scroll under it: at the end of a row that scrolls it would be out
+   of sight on exactly the screen that has no chord for it. */
+.panescroll .panetabs > .panereset,
+.panescroll > .panedrawer > .panereset
+{
+    position: sticky;
+    right: 0;
+    background: var(--pane-bg, #ffffff);
+}
+
+/* `lone': a leaf whose one tab is a pane named there has no strip. */
+.paneleaf.panebare > .panetabs
 {
     display: none;
 }

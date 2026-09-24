@@ -98,7 +98,7 @@ nowhere in here that makes one.
 | `Alt \` / `Alt -` | split right / split down |
 | `Alt Enter` | zoom one pane to fill the layout |
 | `Alt W` | close the pane in front |
-| `Alt 0` | forget the saved layout and start over |
+| `Alt 0` | forget the saved layout and start over (or the `reset` button, or `reset()`) |
 
 Every command is a chord with `Alt` in it, because wherever the bare
 letters already mean something — a text editor, a chat composer, a
@@ -142,13 +142,14 @@ Everything below is a default rather than a rule.
 | `storage` | where a layout is kept | `localStorage` |
 | `keys` | the commands, merged over the defaults | `Alt` chords |
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
-| `lone` | whether a leaf with one tab has a tab strip | `true` |
+| `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
 | `closed` | the drawer's label | `'Closed:'` |
+| `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
-`layout()`, `overlay()`, `tiled()`, `setLayouts(layouts, { store, split })`,
-`destroy()`.
+`layout()`, `reset()`, `overlay()`, `tiled()`,
+`setLayouts(layouts, { store, split })`, `destroy()`.
 
 `setLayouts` swaps in another set of layouts without taking the tiler
 down: the layout that is up is saved under its store, and the mode's
@@ -163,9 +164,13 @@ side.addEventListener('change', () =>
                    { store: side.matches ? 'app:side' : 'app:up' }));
 ```
 
-On a touch screen, `strip: 'scroll'`, `lone: false` and a thicker `split`
-are the usual changes; with a `media` that admits a coarse pointer, the
-tiler runs there too.
+On a touch screen, `strip: 'scroll'`, a thicker `split` and a `lone` list
+naming the pane that should not spend a row on its name (a keyboard, a
+toolbar) are the usual changes, with a `reset` button, since there is no
+`Alt 0` to press; with a `media` that admits a coarse pointer, the tiler
+runs there too. `lone: false` goes further and takes the strip off *any*
+pane moved into a leaf of its own, which leaves it no tab to drag or
+close by.
 
 `destroy()` is the way back out: every pane under its own parent again,
 every listener off the window, and the page as it was found. A page that

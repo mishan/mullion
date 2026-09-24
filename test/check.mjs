@@ -1217,6 +1217,8 @@ try
         const root = document.createElement('div');
         const kept = new Map();
 
+        window.createPanesAgain = createPanes;
+
         const box = (id) =>
         {
             const el = document.createElement('section');
@@ -1373,6 +1375,88 @@ try
 
     check(swapped.moved === 0,
           'and no pane went back to the document on the way');
+
+    /* `lone' as a list, and the reset button. The list takes the strip
+       off the pane it names and no other: a pane somebody has moved into
+       a leaf of its own keeps the tab it is dragged and closed by. And
+       the button, which is how a phone starts over with no Alt 0 to
+       press, is in the drawer's row whether or not anything is closed. */
+    const listed = await phone.evaluate(() =>
+    {
+        const root = document.querySelector('.panesroot');
+
+        window.phonePanes.destroy();
+        window.phoneKept.clear();
+
+        const layout = { dir: 'col', size: [0.3, 0.4, 0.3], kids: [
+            { tabs: ['ph-a'] },
+            { tabs: ['ph-b', 'ph-c', 'ph-d'] },
+            { tabs: ['ph-e'] }] };
+
+        window.phonePanes = createPanesAgain({
+            root,
+            catalog: ['ph-a', 'ph-b', 'ph-c', 'ph-d', 'ph-e'],
+            mode: 'm', layouts: { m: layout },
+            on: true, media: 'all', split: 18, param: 'phone',
+            strip: 'scroll', lone: ['ph-e'], closed: 'More:',
+            reset: '\u21ba',
+            storage: { getItem: (k) => window.phoneKept.get(k) ?? null,
+                       setItem: (k, v) => window.phoneKept.set(k, v),
+                       removeItem: (k) => window.phoneKept.delete(k) },
+        });
+
+        const shown = (id) => getComputedStyle(
+            document.getElementById(`panetab-${id}`)
+                    .closest('.panetabs')).display !== 'none';
+        const drawer = root.querySelector('.panedrawer');
+        const button = root.querySelector('.panereset > button');
+        const before = { a: shown('ph-a'), e: shown('ph-e'),
+                         row: !drawer.checkVisibility(),
+                         seat: button?.closest('.panetabs') ===
+                               document.getElementById('panetab-ph-a')
+                                       .closest('.panetabs'),
+                         label: button?.getAttribute('aria-label') };
+
+        window.phonePanes.close('ph-b');
+
+        const closed = !JSON.stringify(window.phonePanes.layout())
+                            .includes('ph-b');
+
+        button.click();
+
+        const back = window.phonePanes.layout();
+        const more = drawer.querySelector('.panedrawerlabel') === null;
+
+        /* And with every leaf bare there is no strip to sit in, so it
+           goes in the drawer's row, and the row shows. */
+        window.phonePanes.setLayouts({ m: { tabs: ['ph-e'] } },
+                                     { store: 'bare' });
+
+        const alone = root.querySelector('.panereset')
+                          ?.closest('.panedrawer') === drawer &&
+                      drawer.checkVisibility();
+
+        return { ...before, closed, alone,
+                 reset: JSON.stringify(back.kids.map((k) => k.tabs)) ===
+                        JSON.stringify(layout.kids.map((k) => k.tabs)),
+                 more };
+    });
+
+    check(listed.a && !listed.e,
+          'lone as a list takes the strip off the pane it names, and ' +
+          `leaves it on one moved into a leaf alone: ${listed.a} ` +
+          `${listed.e}`);
+
+    check(listed.row && listed.seat && listed.label === 'Reset layout',
+          'reset puts a button at the end of the first strip, and no ' +
+          'drawer row with nothing closed');
+
+    check(listed.alone,
+          'and in the drawer\'s row when every leaf is bare');
+
+    check(listed.closed && listed.reset && listed.more,
+          'and the button puts the mode\'s layout back, closed panes and ' +
+          'all');
 
     await touch.close();
     }

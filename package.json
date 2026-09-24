@@ -1,6 +1,6 @@
 {
   "name": "mullion",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A tiling layout for a page you already have: it adopts the document, puts it back when the window narrows, and tells a pane nobody is looking at to stop working.",
   "keywords": ["tiling", "layout", "panes", "splitter", "dock", "tabs",
                "progressive-enhancement", "no-dependencies"],

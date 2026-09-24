@@ -80,10 +80,18 @@ export interface PanesOptions {
   /** How the tabs and the drawer take a row too narrow for them: shrunk
    *  to fit, or at their own widths in a row that scrolls sideways. */
   strip?: 'shrink' | 'scroll';
-  /** Whether a leaf with a single tab has a tab strip over it. */
-  lone?: boolean;
+  /** Whether a leaf with a single tab has a tab strip over it: `false`
+   *  for none, or the ids of the panes that go without one when alone.
+   *  Prefer the list: a leaf with no strip cannot be dragged or closed
+   *  except by the chords. */
+  lone?: boolean | string[];
   /** What the drawer of closed panes is labelled. */
   closed?: string;
+  /** A button that puts the mode's default layout back, labelled with
+   *  this (its accessible name is "Reset layout"): at the end of the
+   *  first tab strip, or in the drawer's row when every leaf is bare.
+   *  None when null. */
+  reset?: string | null;
 }
 
 export interface PaneKeys {
@@ -115,6 +123,9 @@ export interface Panes {
   overlay(): HTMLElement;
   /** The layout as it stands, copied. */
   layout(): PaneNode | null;
+  /** Back to the mode's default layout, forgetting the one kept for it:
+   *  what Alt 0 does. */
+  reset(): void;
   /** Raise a pane: in front of its leaf, and out of the drawer if that is
    *  where it was. `focus: false` for a pane the page is raising at
    *  somebody rather than for them. */
