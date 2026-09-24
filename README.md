@@ -154,7 +154,7 @@ Everything below is a default rather than a rule.
 | `onShow` | `(id, on)` — a pane came into view, or left it | — |
 | `onLayout` | `(layout, mode)` — the layout changed, by a person or through the handle | — |
 | `on` | tile when the screen allows it | `false` |
-| `store` | localStorage key prefix; the mode is appended | `'panes'` |
+| `store` | the key a layout is kept under, in `storage`; the mode is appended | `'panes'` |
 | `editing` | extra selector for "a key here is text" | — |
 | `media` | the screen worth tiling on | `(min-width: 60em) and (any-pointer: fine)` |
 | `split` | a divider's thickness in pixels | `6` |
@@ -184,9 +184,8 @@ document, and every pane is already on it.
 `setLayouts` swaps in another set of layouts without taking the tiler
 down: the layout that is up stays kept under its store, as every change
 to it was kept when it was made, and the mode's layout from the new set
-replaces it. It is for a page with more than one
-shape, such as a phone that has one layout upright and another on its
-side:
+replaces it. It is for a page with more than one shape, such as a phone
+that has one layout upright and another on its side:
 
 ```js
 const side = matchMedia('(orientation: landscape)');
@@ -288,8 +287,8 @@ There are two kinds:
 | it ends | when the page calls `remove(id)` | when the page calls `remove(id)` |
 
 A person's close of an ephemeral pane — its cross, `Alt W`, a drop on
-the drawer, or `close(id)` from the page while tiled — moves nothing. It calls
-`onDiscard`, and the page ends the pane with `remove`, now or after
+the drawer, or `close(id)` from the page while tiled — moves nothing. It
+calls `onDiscard`, and the page ends the pane with `remove`, now or after
 asking about unsaved changes, or keeps it by doing nothing:
 
 ```js
@@ -397,10 +396,21 @@ Or [the same page on the web](https://mishan.github.io/mullion/).
 `demo/` is a code playground: an editor per file, a preview, a console,
 and a chart of what the preview drew. It is an ordinary page of
 sections, and everything mullion does to it is one `createPanes` call
-over them. The preview's program is held still while its pane is off
-the screen, the chart stops drawing behind a tab, and the Console counts
-on its tab what arrived while it was hidden. That is `onShow`, doing
-the job it is for. **Plain page** in its header turns the tiler off.
+over them, and a handful of calls back:
+
+- The preview's program is held still while its pane is off the screen,
+  the chart stops drawing behind a tab, and the Console counts on its
+  tab what arrived while it was hidden. That is `onShow`, doing the job
+  it is for.
+- **New file** makes a module that runs before `app.js`. Its editor is a
+  pane the page adds, ephemeral: closing its tab closes the editor and
+  not the file, and a visit later it is open again where it was
+  (`add`, `onDiscard`, `remove`, `later`).
+- **Undo layout** keeps each layout `onLayout` reports and puts the last
+  one back with `setLayout`.
+- **Plain page** in its header turns the tiler off, and `?touch` tiles
+  it on a phone, one layout upright and another on its side
+  (`setLayouts`).
 
 The tests drive a different page, `test/fixture/`, built for the claims
 they make: a fold, a box that scrolls sideways, a popover the pane would
@@ -414,6 +424,19 @@ npm run test:demo     # the playground still works
 npm run types         # the declarations, which are hand-written
 npm run shot          # the gif above and the demo's link preview, re-recorded (needs ffmpeg)
 ```
+
+## Browsers
+
+The suite runs in Chromium, Firefox and WebKit. A pane that moves — a
+split collapsing around it, a tab dragged to another leaf — is moved
+with `moveBefore` where the browser has it (Chromium and Firefox), so an
+`<iframe>` in it does not load again; where it does not (Safari), it is
+an ordinary move, and the `<iframe>` reloads. Where a box in the pane was
+scrolled to is kept either way.
+
+Chromium's renderer has crashed on some of those moves, taking the page
+with it. mullion works around it, and will until the browser's fix is
+what people have.
 
 ## License
 
