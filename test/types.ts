@@ -41,6 +41,7 @@ const options: PanesOptions = {
     strip: 'scroll',
     lone: ['console'],
     closed: 'More:',
+    drawer: document.createElement('nav'),
     reset: 'Reset layout',
     onLayout: (tree: PaneNode, mode: string) => { void tree; void mode; },
     version: 2,
@@ -66,6 +67,7 @@ const bare: PanesOptions = {
     storage: remote,
     lone: false,
     reset: null,
+    drawer: false,
     onDiscard: async (id: string) => { await Promise.resolve(id); },
 };
 

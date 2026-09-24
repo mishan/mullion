@@ -178,6 +178,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                                storage = KEEP, keys = {},
                                strip = 'shrink', lone = true,
                                closed: label = 'Closed:',
+                               drawer: shelf = null,
                                reset: again = null,
                                onLayout = () => {}, version,
                                later = () => false, onDiscard = null })
@@ -1815,7 +1816,18 @@ export function createPanes ({ root, catalog, layouts, mode,
         focus = leaf;
         changed();
         render();
-        find(`panereopen-${id}`)?.focus();
+
+        /* Onto its button in the drawer where the keyboard can reach one
+           -- not where the drawer is a menu of the page's that is shut,
+           and not for a pane that has no button to come back by. There,
+           onto the tab in front of what is left, as Alt W does, rather
+           than out to the top of the document. */
+        const back = tray.querySelector(`#${CSS.escape(`panereopen-${id}`)}`);
+
+        back?.focus();
+
+        if (back === null || document.activeElement !== back)
+            raiseTab(holds(leaf) ? leaf : firstLeaf());
     };
 
     /* The tab in front of a leaf, with the focus left where the person
@@ -2160,6 +2172,12 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (strip !== undefined)
             strip.append(again$);
+        else if (shelf === false)
+        {
+            /* No strip and no drawer to sit in: a page that draws no
+               drawer has its own menu, and reset() is for that. */
+            again$.remove();
+        }
         else
         {
             tray.append(again$);
@@ -2171,7 +2189,18 @@ export function createPanes ({ root, catalog, layouts, mode,
        from being put back, into the leaf they left or -- where that leaf
        closed with them -- whichever one was last touched. Nothing here
        is a pane that has gone; a drawer is what makes closing one
-       something other than losing it. */
+       something other than losing it.
+     *
+       Or listed in `drawer', an element of the page's, when it has one:
+       a phone's side menu, where the row above the layout was height the
+       layout wanted. The same element and the same buttons, drawn into
+       the page's box rather than the root, and taken out of it with the
+       tiler -- and nothing else in that box touched, since the rest of a
+       menu is the page's: its settings, its account, its links.
+
+       Or nowhere, for `drawer: false': a page that lists its panes itself,
+       from panes() and present(), with whatever else it wants beside
+       them. */
     const tray = el('panedrawer');
 
     const drawerOf = (out) =>
@@ -2315,6 +2344,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             seen = new Map();
             hint = null;
             root.replaceChildren();
+            tray.remove();
             root.classList.remove('panezoom');
             settle();
 
@@ -2376,7 +2406,17 @@ export function createPanes ({ root, catalog, layouts, mode,
            moves should be what moved, and an element appended to a
            detached parent has moved whether anything asked it to or
            not. */
-        arrange(root, [drawerOf(out), made, keep]);
+        if (shelf === false)
+            tray.remove();
+        else
+        {
+            drawerOf(out);
+
+            if (shelf !== null && tray.parentElement !== shelf)
+                shelf.append(tray);
+        }
+
+        arrange(root, shelf === null ? [tray, made, keep] : [made, keep]);
 
         if (some)
             fill(tree);

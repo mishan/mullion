@@ -96,6 +96,12 @@ export interface PanesOptions {
   lone?: boolean | string[];
   /** What the drawer of closed panes is labelled. */
   closed?: string;
+  /** Where the closed panes are listed: a row above the layout (`null`),
+   *  an element of the page's such as a side menu, or nowhere (`false`),
+   *  for a page that lists them itself from `panes()` and `present()`.
+   *  In an element, the list is appended while tiled and taken out when
+   *  the tiler is off, and nothing else in the element is touched. */
+  drawer?: HTMLElement | null | false;
   /** A button that puts the mode's default layout back, labeled with
    *  this: at the end of the first tab strip, or in the drawer's row when
    *  every leaf is bare. Its accessible name is this where it has words
