@@ -84,8 +84,9 @@ or write by hand:
 
 A leaf holding more than one pane is tabs. The panes no leaf holds are the
 **drawer**: listed above the layout, one click from coming back. Nothing
-is ever destroyed — closing a pane puts it away, which is why there is
-nowhere in here that makes one.
+a person does destroys a pane — closing one puts it away. Panes come and
+go only when the page says so, with `add` and `remove`, and even then
+the element is the page's: mullion makes none and deletes none.
 
 ## What a person can do
 
@@ -153,9 +154,12 @@ Everything below is a default rather than a rule.
 | `closed` | the drawer's label | `'Closed:'` |
 | `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
 | `version` | which version of your layouts this is; a layout kept under another is not read back | — |
+| `later` | `(id)` — whether a pane not here yet will be added, so a kept layout keeps its place | none will |
+| `onDiscard` | `(id)` — a person closed an ephemeral pane; end it with `remove(id)`, or don't | — |
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
+`add(id, { near, focus, keep })`, `remove(id)`, `panes()`,
 `layout()`, `setLayout(layout)`, `reset()`, `overlay()`, `tiled()`,
 `setLayouts(layouts, { store, split, version })`, `destroy()`.
 
@@ -215,6 +219,85 @@ there was one, is not read back, and your new default comes up.
 ```js
 createPanes({ /* … */ version: 3 });
 ```
+
+## Panes the page adds
+
+A page that opens things — files in an editor, a chart per query — has
+panes that are not in its markup when it loads. It puts the element into
+the document itself, where it should sit when the window is narrow, and
+then hands it over:
+
+```js
+const el = document.createElement('section');
+
+el.id = `file-${name}`;
+el.dataset.pane = '';
+el.dataset.paneTitle = name;
+document.getElementById('files').append(el);
+
+panes.add(el.id, { near: 'editor' });
+```
+
+Tiled, it goes where a kept layout had it, beside `near`, or where the
+person last was, in front and with the focus (`focus: false` for a page
+putting back what was open last time).
+
+### How a pane ends
+
+The page owns what is in a pane, so the page decides when one ends.
+There are two kinds:
+
+| | lasting | ephemeral |
+|---|---|---|
+| what it is | every pane in the catalog, and `add(id, { keep: true })` | what `add` takes on otherwise |
+| a person closes it | it goes to the drawer | `onDiscard(id)` asks the page |
+| in the drawer | one click from coming back | never |
+| a layout comes up without it | it stays in the drawer | it is put back in |
+| it ends | when the page calls `remove(id)` | when the page calls `remove(id)` |
+
+A person's close of an ephemeral pane — its cross, `Alt W`, a drop on
+the drawer, or `close(id)` from the page — moves nothing. It calls
+`onDiscard`, and the page ends the pane with `remove`, now or after
+asking about unsaved changes, or keeps it by doing nothing:
+
+```js
+createPanes({
+  // …
+  onDiscard: async (id) => {
+    if (await unsaved(id) && !await confirmDiscard(id))
+      return;
+
+    panes.remove(id)?.remove();
+  },
+});
+```
+
+A page with no `onDiscard` offers no way to close an ephemeral pane:
+no cross, and `Alt W` does nothing. Nothing here ends a pane on its own.
+
+`remove(id)` is the only way a pane ends. It leaves the layout the way a
+close takes it, `onShow` hears it go, and its element is put back where
+it was in the document and returned — while tiled that is back in the
+body, so a page that is done with it removes it in the same breath, as
+above. The same id can be added again.
+
+`panes()` lists every pane with its `kind`, `where` it is (`front`,
+`behind`, `drawer`, `off`, or `document` when untiled) and whether it is
+`visible`: what a page needs to keep count, close the oldest, or show
+what is open.
+
+### Places kept for panes still to come
+
+A kept layout drops the panes the page does not have when it is read,
+which is every added pane. `later` says which ones will come:
+
+```js
+createPanes({ /* … */ later: (id) => openFiles.has(id) });
+```
+
+and their places are kept, not drawn, until they are added. It is asked
+again whenever the layout is kept, so a `later` that says what really
+exists lets go of the place for a file that has since been deleted.
 
 `destroy()` is the way back out: every pane under its own parent again,
 every listener off the window, and the page as it was found. A page that

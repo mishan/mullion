@@ -2118,7 +2118,385 @@ try
     await own.close();
     }
 
-    /* ---- nobody looking ----
+    /* ---- panes the page adds, and takes away ----
+     *
+     * An element the page puts into the document once it is up, taken on
+     * as a catalog entry would have been; a place kept for it across a
+     * visit when `later' says it will come; and a pane that is no longer
+     * one, its element handed back where it was.
+     */
+    {
+    const own = await browser.newPage({ viewport: WIDE });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    const grown = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const root = document.createElement('div');
+        const kept = new Map();
+        const shows = [];
+        const heard = [];
+        const box = (id, mark = true) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+
+            if (mark)
+                el.dataset.pane = '';
+
+            el.dataset.paneMin = '40';
+
+            return el;
+        };
+
+        Object.assign(root.style, { position: 'fixed', inset: '0',
+                                    zIndex: '10', background: 'white',
+                                    display: 'flex',
+                                    flexDirection: 'column' });
+
+        const home = document.createElement('div');
+
+        document.body.append(root, home);
+        home.append(box('ad-a'), box('ad-b'));
+
+        const make = (storage) => createPanes({
+            root, catalog: ['ad-a', 'ad-b'], mode: 'm',
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['ad-a'] }, { tabs: ['ad-b'] }] } },
+            on: true, media: 'all', param: 'grown',
+            later: (id) => id.startsWith('ad-f'),
+            storage: storage ?? {
+                getItem: (k) => kept.get(k) ?? null,
+                setItem: (k, v) => kept.set(k, v),
+                removeItem: (k) => kept.delete(k) },
+            onShow: (id, on) => shows.push(`${id} ${on}`),
+            onLayout: (tree) => heard.push(tree),
+        });
+        const tabsOf = (tree) => JSON.stringify(
+            tree.tabs ?? tree.kids.map((k) => k.tabs));
+        const leaves = () => [...root.querySelectorAll('.paneleaf')]
+            .filter((l) => l.checkVisibility())
+            .sort((x, y) => x.getBoundingClientRect().left -
+                            y.getBoundingClientRect().left)
+            .map((l) => [...l.querySelectorAll('.panetab')]
+                .map((t) => t.id.replace(/^panetab-/, '')));
+
+        let panes = make();
+
+        /* Refused: nothing there, not marked, already a pane. */
+        const stray = box('ad-f9');
+        const plain = box('ad-f8', false);
+
+        home.append(plain);
+
+        const refused = [panes.add('ad-f9'), panes.add('ad-f8'),
+                         panes.add('ad-a')];
+
+        plain.remove();
+
+        /* Beside a pane, in front, with the focus, and heard. */
+        home.append(box('ad-f1'));
+
+        const told = heard.length;
+        const added = panes.add('ad-f1', { near: 'ad-b' });
+        const beside = leaves();
+        const focused = document.activeElement.id;
+        const shownNow = shows.includes('ad-f1 true');
+        const heardAdd = heard.length - told;
+
+        /* Its own leaf in the middle, and a visit later, before the page
+           has added it again: its place is kept and not drawn, and
+           adding it puts it back there -- without the focus, asked. */
+        panes.setLayout({ dir: 'row', size: [1, 1, 1], kids: [
+            { tabs: ['ad-a'] }, { tabs: ['ad-f1'] }, { tabs: ['ad-b'] }] });
+        panes.destroy();
+        panes = make();
+
+        const waiting = leaves();
+
+        document.body.focus();
+        panes.add('ad-f1', { focus: false });
+
+        const back = leaves();
+        const kept3 = document.activeElement.id !== 'panetab-ad-f1';
+
+        /* And a server slower than the page: the files come back before
+           the layout does, and the layout is still the one put up. */
+        panes.destroy();
+
+        const saved = kept.get('panes:m');
+
+        panes = make({
+            getItem: () => wait(150).then(() => saved),
+            setItem: () => {}, removeItem: () => {} });
+        panes.add('ad-f1', { focus: false, keep: true });
+
+        const early = leaves();
+
+        await wait(300);
+
+        const late = leaves();
+
+        /* Kept, and put away by somebody, it stays put away through a
+           reset. */
+        document.getElementById('paneshut-ad-f1').click();
+        panes.reset();
+
+        const afterReset = leaves();
+        const inDrawer = root.querySelector('#panereopen-ad-f1') !== null;
+
+        /* And taken away: the element back where it was, told it has left
+           the screen, the layout without it. */
+        panes.present('ad-f1');
+        shows.length = 0;
+
+        const before = heard.length;
+        const el = panes.remove('ad-f1');
+        const handed = {
+            same: el === document.getElementById('ad-f1'),
+            home: el?.parentElement === home,
+            told: shows.includes('ad-f1 false'),
+            gone: !JSON.stringify(panes.layout()).includes('ad-f1'),
+            drawer: root.querySelector('#panereopen-ad-f1') === null,
+            heard: heard.length - before,
+            again: panes.remove('ad-f1'),
+            visible: panes.visible('ad-f1'),
+        };
+
+        /* And the same id taken on again. */
+        const readded = panes.add('ad-f1') && leaves().flat().includes('ad-f1');
+
+        panes.destroy();
+
+        const whole = el.parentElement === home &&
+                      document.getElementById('ad-a').parentElement === home;
+
+        root.remove();
+        home.remove();
+        void stray;
+
+        return { refused, added, beside, focused, shownNow, heardAdd,
+                 waiting, back, kept3, early, late, afterReset, inDrawer,
+                 handed, readded, whole };
+    });
+
+    check(grown.refused.every((r) => r === false),
+          'add refuses an element not in the document, one not marked, ' +
+          'and a pane it already has');
+
+    check(grown.added && JSON.stringify(grown.beside) ===
+              '[["ad-a"],["ad-b","ad-f1"]]' &&
+          grown.focused === 'panetab-ad-f1' && grown.shownNow &&
+          grown.heardAdd === 1,
+          'add puts a pane beside the one named, in front, with the focus, ' +
+          `and says so: ${JSON.stringify(grown.beside)}`);
+
+    check(JSON.stringify(grown.waiting) === '[["ad-a"],["ad-b"]]' &&
+          JSON.stringify(grown.back) === '[["ad-a"],["ad-f1"],["ad-b"]]' &&
+          grown.kept3,
+          'a place `later\' kept is not drawn until the pane is added, and ' +
+          `then it is where it was: ${JSON.stringify(grown.back)}`);
+
+    check(grown.early.length === 2 && grown.early.flat().includes('ad-f1') &&
+          JSON.stringify(grown.late) === '[["ad-a"],["ad-f1"],["ad-b"]]',
+          'and a pane added before a kept layout arrives does not stop it ' +
+          `being put up: ${JSON.stringify(grown.late)}`);
+
+    check(!grown.afterReset.flat().includes('ad-f1') && grown.inDrawer,
+          'a pane added to be kept, put away by somebody, stays in the ' +
+          'drawer through a reset');
+
+    check(grown.handed.same && grown.handed.home && grown.handed.told &&
+          grown.handed.gone && grown.handed.drawer &&
+          grown.handed.heard === 1 && grown.handed.again === null &&
+          !grown.handed.visible,
+          'remove hands the element back where it was, off the screen, ' +
+          `out of the layout and the drawer: ${JSON.stringify(grown.handed)}`);
+
+    check(grown.readded && grown.whole,
+          'and the same id can be added again, and destroy() hands back ' +
+          'the rest');
+
+    await own.close();
+    }
+
+    /* ---- how an added pane ends ----
+     *
+     * What the page adds is ephemeral unless it asks to be kept: a
+     * person's close does not put it in the drawer, it asks the page,
+     * which ends it with `remove' or does not. A page that has not said
+     * how offers no way to close one at all.
+     */
+    {
+    const own = await browser.newPage({ viewport: WIDE });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const root = document.createElement('div');
+        const home = document.createElement('div');
+        const box = (id) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneMin = '40';
+
+            return el;
+        };
+
+        Object.assign(root.style, { position: 'fixed', inset: '0',
+                                    zIndex: '10', background: 'white',
+                                    display: 'flex',
+                                    flexDirection: 'column' });
+        document.body.append(root, home);
+        home.append(box('ep-a'), box('ep-x'), box('ep-y'), box('ep-z'));
+
+        window.epAsked = [];
+        window.epKept = new Map();
+        window.epLater = new Set(['ep-gone']);
+        window.epRoot = root;
+        window.epMake = (discard) => createPanes({
+            root, catalog: ['ep-a'], mode: 'm', on: true, media: 'all',
+            param: 'ephemeral',
+            later: (id) => window.epLater.has(id),
+            storage: { getItem: (k) => window.epKept.get(k) ?? null,
+                       setItem: (k, v) => window.epKept.set(k, v),
+                       removeItem: (k) => window.epKept.delete(k) },
+            ...(discard ? { onDiscard: (id) =>
+            {
+                window.epAsked.push(id);
+
+                if (id !== 'ep-y')
+                    window.epPanes.remove(id)?.remove();
+            } } : {}),
+        });
+    });
+
+    /* No onDiscard: nothing a person does closes it. */
+    const none = await own.evaluate(() =>
+    {
+        const panes = window.epMake(false);
+
+        panes.add('ep-x');
+
+        const cross = document.getElementById('paneshut-ep-x') !== null;
+
+        document.getElementById('panetab-ep-x').focus();
+        document.getElementById('panetab-ep-x').dispatchEvent(
+            new KeyboardEvent('keydown', { code: 'KeyW', altKey: true,
+                                           bubbles: true }));
+        panes.close('ep-x');
+
+        const still = JSON.stringify(panes.layout()).includes('ep-x');
+        const listed = panes.panes();
+
+        panes.destroy();
+
+        return { cross, still, listed };
+    });
+
+    check(!none.cross && none.still,
+          'an added pane on a page with no onDiscard has no cross, and ' +
+          'neither Alt W nor close() ends it');
+
+    check(JSON.stringify(none.listed.map((p) => [p.id, p.kind, p.where])) ===
+              '[["ep-a","lasting","behind"],["ep-x","ephemeral","front"]]',
+          'panes() lists every pane with its kind and where it is: ' +
+          JSON.stringify(none.listed));
+
+    /* With onDiscard: the page is asked, and ends it or does not. */
+    const asked = await own.evaluate(() =>
+    {
+        window.epPanes = window.epMake(true);
+
+        const panes = window.epPanes;
+
+        panes.add('ep-x', { near: 'ep-a' });
+        panes.add('ep-y', { near: 'ep-a' });
+        panes.add('ep-z', { near: 'ep-a' });
+
+        const el = document.getElementById('ep-x');
+
+        panes.present('ep-x');
+        document.getElementById('paneshut-ep-x').click();
+
+        const ended = {
+            asked: [...window.epAsked],
+            gone: !JSON.stringify(panes.layout()).includes('ep-x') &&
+                  !el.isConnected,
+            focus: document.activeElement.classList.contains('panetab'),
+            drawer: window.epRoot.querySelector('.paneclosed') === null,
+        };
+
+        /* A page that says no: nothing moves. */
+        panes.present('ep-y');
+        document.getElementById('panetab-ep-y').dispatchEvent(
+            new KeyboardEvent('keydown', { code: 'KeyW', altKey: true,
+                                           bubbles: true }));
+
+        const vetoed = JSON.stringify(panes.layout()).includes('ep-y') &&
+                       window.epAsked.at(-1) === 'ep-y';
+
+        /* And close() from the page asks the same way. */
+        panes.close('ep-z');
+
+        const closedByPage = window.epAsked.at(-1) === 'ep-z' &&
+            !JSON.stringify(panes.layout()).includes('ep-z');
+
+        return { ended, vetoed, closedByPage };
+    });
+
+    check(JSON.stringify(asked.ended.asked) === '["ep-x"]' &&
+          asked.ended.gone && asked.ended.focus && asked.ended.drawer,
+          'its cross asks the page, which ends it; the keyboard stays on ' +
+          `a tab and nothing goes to the drawer: ${JSON.stringify(asked.ended)}`);
+
+    check(asked.vetoed,
+          'Alt W asks too, and a page that does not end it keeps it');
+
+    check(asked.closedByPage,
+          'and close() on one asks the page rather than using the drawer');
+
+    /* A place kept for a pane still to come is let go of once `later'
+       no longer says it will come. */
+    const trimmed = await own.evaluate(() =>
+    {
+        const panes = window.epPanes;
+
+        panes.setLayout({ dir: 'row', size: [1, 1], kids: [
+            { tabs: ['ep-a'] }, { tabs: ['ep-gone'] }] });
+
+        const before = window.epKept.get('panes:m').includes('ep-gone');
+
+        window.epLater.delete('ep-gone');
+        panes.present('ep-y');
+
+        const after = window.epKept.get('panes:m').includes('ep-gone');
+
+        panes.destroy();
+
+        return { before, after };
+    });
+
+    check(trimmed.before && !trimmed.after,
+          'a place kept for a pane still to come is let go of when later() ' +
+          'stops saying it will come');
+
+    await own.close();
+    }
+
+        /* ---- nobody looking ----
      *
      * The untiled page is a scroll, and a pane scrolled out of it is as
      * out of sight as one behind a tab; a window in the background is
