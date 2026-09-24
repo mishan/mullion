@@ -121,7 +121,9 @@ export interface PanesOptions {
   version?: string | number;
   /** Whether a pane this page does not have yet will be added later, with
    *  `add`: its place in a kept layout is kept for it rather than dropped,
-   *  and not drawn until it is added. */
+   *  and not drawn until it is added. Asked again when the layout is kept,
+   *  and when a pane is removed -- one that will come back keeps its
+   *  place, as a component unmounted and mounted again needs. */
   later?: (id: string) => boolean;
   /** A person closed an ephemeral pane -- by its cross, Alt W, a drop on
    *  the drawer -- or the page called `close` on one. Nothing has moved:
@@ -207,7 +209,10 @@ export interface Panes {
   panes(): PaneState[];
   /** No longer a pane: out of the layout, told it has left the screen,
    *  and its element put back where it was in the document and returned,
-   *  for the page to keep or delete. Null for a pane there is not. */
+   *  for the page to keep or delete. A pane `later` says will come back
+   *  keeps its place, not drawn, until it is added again -- in front
+   *  again if it was, unless the layout is changed meanwhile. Null for a pane
+   *  there is not. */
   remove(id: string): HTMLElement | null;
   /** What its tab says. */
   setTitle(id: string, text: string): void;

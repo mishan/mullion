@@ -39,7 +39,11 @@ runs in Firefox and WebKit as well as Chromium.
   `remove`, or keeps it. Ephemeral panes never go to the drawer. Without
   `onDiscard` they have no close button.
 - **`later(id)`** keeps a saved layout's place for a pane the page will
-  add, rather than dropping it when the layout is read.
+  add, rather than dropping it when the layout is read, and for a pane
+  removed that will come back, as a component unmounted and mounted
+  again (React's `StrictMode`, a hidden `<Activity>`) does.
+- **A Frameworks section in the README**: how to use mullion with React
+  and Vue without either losing track of the elements mullion moves.
 - **`onLayout(layout, mode)`**, told of every change with a copy of the
   tree.
 - **Storage that answers later.** `getItem`, `setItem` and `removeItem`

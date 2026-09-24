@@ -774,8 +774,17 @@ export function createPanes ({ root, catalog, layouts, mode,
         edits++;
         waiting = 0;
         owed = false;
+        wasFront.clear();
         told();
     };
+
+    /* Panes removed from in front of their leaf that `later' says will
+       come back: in front again when they do. Their index cannot say so
+       while they are gone -- a render keeps a leaf's front tab among the
+       tabs it has, and one that was last is moved off it. Forgotten once
+       somebody changes the layout, since then what is in front is theirs
+       to have said. */
+    const wasFront = new Set();
 
     /* What the page asked for while a kept layout was on its way, done
        again over it once it comes: a pane raised at somebody. */
@@ -2955,7 +2964,10 @@ export function createPanes ({ root, catalog, layouts, mode,
                in front of it, as it was left. */
             const dormant = tree === null ? null : leafWith(id);
             const front = dormant === null ? undefined
+                        : wasFront.has(id) ? id
                         : liveTabs(dormant)[dormant.active ?? 0];
+
+            wasFront.delete(id);
 
             const p = enlist(id, el);
 
@@ -3036,7 +3048,17 @@ export function createPanes ({ root, catalog, layouts, mode,
                 (p.host?.contains(at) || at.id === `panetab-${id}` ||
                  at.id === `paneshut-${id}`);
 
-            if (held)
+            /* A pane `later' says will come back keeps its place, not
+               drawn, as a place kept for it on a load is -- and what was
+               in front of its leaf stays in front. A component unmounted
+               and mounted again, which is what a framework's strict mode
+               and a hidden subtree both do, is the same pane coming back,
+               and should find its place where it left it. */
+            const coming = held && later(id);
+            const front = coming ? liveTabs(leaf)[leaf.active ?? 0]
+                                 : undefined;
+
+            if (held && !coming)
                 drawer(id);
 
             home.delete(id);
@@ -3054,6 +3076,14 @@ export function createPanes ({ root, catalog, layouts, mode,
             shown.delete(id);
             restore(p);
             panes.delete(id);
+
+            if (coming && front !== undefined && front !== id)
+                leaf.active = liveTabs(leaf).indexOf(front);
+
+            if (coming && front === id)
+                wasFront.add(id);
+            else
+                wasFront.delete(id);
 
             /* The page's doing, as `add' is. */
             if (held)
