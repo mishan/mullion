@@ -858,6 +858,16 @@ export function createPanes ({ root, catalog, layouts, mode,
        a `:' in one is a class or a pseudo-class to a selector. */
     const find = (id) => root.querySelector(`#${CSS.escape(id)}`);
 
+    /* Whether a row runs from the right where this element is: a page
+     * that reads right to left lays a split's first child out on the
+     * right, and everything that turns a direction on the screen into a
+     * place in the tree -- an arrow key, a pointer dragged, an edge
+     * dropped on -- has to turn it the other way round there. Asked of
+     * the element each time rather than of the page once: a direction
+     * is inherited, and can change under any box.
+     */
+    const backward = (el) => getComputedStyle(el).direction === 'rtl';
+
     /* ---- dragging a tab ---- */
 
     /* Where a tab would land if it were let go here: a place in a strip,
@@ -920,7 +930,13 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (side === null || !splittable(leaf, id, side[0]))
             return { drop: 'into', leaf, box };
 
-        return { drop: 'beside', leaf, box, dir: side[0], after: side[1] };
+        /* `far' is the right or the bottom half, which is what is drawn;
+           `after' is which side of the leaf it goes in the tree, which
+           for a row is the other one in a page that reads leftward. */
+        const [dir, far] = side;
+
+        return { drop: 'beside', leaf, box, dir, far,
+                 after: dir === 'row' && backward(box) ? !far : far };
     };
 
     /* What the drop would do, drawn over the pane it would do it to. */
@@ -961,9 +977,9 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         hint.hidden = false;
         hint.style.left = `${r.left - o.left +
-            (half && row && where.after ? r.width / 2 : 0)}px`;
+            (half && row && where.far ? r.width / 2 : 0)}px`;
         hint.style.top = `${r.top - o.top +
-            (half && !row && where.after ? r.height / 2 : 0)}px`;
+            (half && !row && where.far ? r.height / 2 : 0)}px`;
         hint.style.width = `${half && row ? r.width / 2 : r.width}px`;
         hint.style.height = `${half && !row ? r.height / 2 : r.height}px`;
     };
@@ -1390,7 +1406,9 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
             return;
 
-        const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+        /* The arrow pointing the way the strip reads is the next tab. */
+        const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key] *
+                     (backward(e.currentTarget) ? -1 : 1);
         const to = e.key === 'Home' ? 0
                  : e.key === 'End' ? ids.length - 1
                  : step === undefined ? -1
@@ -1512,7 +1530,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 const to = row ? m.clientX : m.clientY;
 
                 moved ||= to !== from;
-                by(to - from);
+                by((to - from) * (row && backward(bar) ? -1 : 1));
                 from = to;
             };
 
@@ -1545,7 +1563,11 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (step === undefined)
                 return;
 
-            by(step * 16);
+            /* Left and right the way the pointer would go: in a row that
+               reads leftward, the first child is the one on the right. */
+            const flip = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+
+            by(step * 16 * (flip && row && backward(bar) ? -1 : 1));
             changed();
             e.preventDefault();
         });
@@ -2084,7 +2106,10 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (to !== null)
                 into(id, to);
             else
-                beside(id, leaf, dir, way[0] + way[1] > 0);
+                beside(id, leaf, dir,
+                       way[1] > 0 ||
+                       (way[0] !== 0 &&
+                        (way[0] > 0) !== backward(boxOf(leaf))));
 
             unzoomFor(leafWith(id));
             done(leafWith(id) ?? leaf);

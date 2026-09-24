@@ -101,6 +101,11 @@ nowhere in here that makes one.
 | `Alt W` | close the pane in front |
 | `Alt 0` | forget the saved layout and start over (or the `reset` button, or `reset()`) |
 
+In a page that reads right to left, every direction is the one on the
+screen: the arrow pointing left along a strip is the next tab, a divider
+goes the way it is dragged, and a pane dropped on or moved off a left
+edge goes on the left.
+
 Every command is a chord with `Alt` in it, because wherever the bare
 letters already mean something — a text editor, a chat composer, a
 keyboard instrument — a tiler that took `W` for itself would have taken
