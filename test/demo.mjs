@@ -179,10 +179,15 @@ try
     });
     await page.click('#run');
 
-    check(await until(page, () =>
-              [...document.querySelectorAll('#log .error .where')]
-                  .some((n) => n.textContent === 'app.js:3')),
-          'an error in the program is reported at its line of app.js');
+    const where = await until(page, () =>
+        [...document.querySelectorAll('#log .error .where')]
+            .some((n) => n.textContent === 'app.js:3'));
+    const said = await page.evaluate(() =>
+        [...document.querySelectorAll('#log .error')]
+            .map((n) => n.textContent).join(' | '));
+
+    check(where,
+          `an error in the program is reported at its line of app.js: ${said}`);
 
     check(await page.evaluate(() =>
               document.querySelector('[data-open="ed-js"]')
@@ -232,9 +237,10 @@ finally
 }
 
 /* The error the program was given on purpose is the frame's, and
-   Playwright reports a frame's errors as the page's. */
+   Playwright reports a frame's errors as the page's -- in each engine's
+   own words, so it is matched by the name that was not defined. */
 errors.splice(0, errors.length,
-              ...errors.filter((e) => !e.includes('nope is not defined')));
+              ...errors.filter((e) => !/\bnope\b/.test(e)));
 
 check(errors.length === 0,
       errors.length === 0 ? 'and the page raised nothing'
