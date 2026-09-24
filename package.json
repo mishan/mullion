@@ -19,7 +19,7 @@
     "./panes.css": "./src/panes.css",
     "./package.json": "./package.json"
   },
-  "files": ["src", "LICENSE", "README.md"],
+  "files": ["src", "LICENSE", "README.md", "CHANGELOG.md"],
   "sideEffects": ["*.css"],
   "scripts": {
     "prepublishOnly": "npm run types && npm test",
