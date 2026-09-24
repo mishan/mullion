@@ -41,7 +41,17 @@ const options: PanesOptions = {
     lone: ['console'],
     closed: 'More:',
     reset: 'Reset layout',
+    onLayout: (tree: PaneNode, mode: string) => { void tree; void mode; },
 };
+
+/* And a storage that answers later, which is a server. */
+const remote: PanesOptions['storage'] = {
+    getItem: async (k: string) => (k === '' ? null : '{"tabs":[]}'),
+    setItem: async (k: string, v: string) => { void k; void v; },
+    removeItem: (k: string) => { void k; },
+};
+
+void remote;
 
 const panes: Panes = createPanes(options);
 

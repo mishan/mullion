@@ -1460,6 +1460,175 @@ try
 
     await touch.close();
     }
+
+    /* ---- somewhere else to keep it ----
+     *
+     * What a page with accounts does: keeps the layout on a server, which
+     * answers later, and is told of every change a person makes. The
+     * page opens on its default rather than waiting, and what was kept
+     * comes up when it arrives -- unless somebody has moved something
+     * first, which is newer.
+     */
+    {
+    const own = await browser.newPage({ viewport: WIDE });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    const told = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../src/panes.js');
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const root = document.createElement('div');
+        const heard = [];
+        let loose = 0;
+
+        window.addEventListener('unhandledrejection', () => { loose++; });
+
+        const box = (id) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneMin = '40';
+
+            return el;
+        };
+
+        Object.assign(root.style, { position: 'fixed', inset: '0',
+                                    zIndex: '10', background: 'white',
+                                    display: 'flex',
+                                    flexDirection: 'column' });
+        document.body.append(root, box('kp-a'), box('kp-b'), box('kp-c'));
+
+        const layout = { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['kp-a', 'kp-b'] }, { tabs: ['kp-c'] }] };
+        const kept = { dir: 'col', size: [0.4, 0.6], kids: [
+            { tabs: ['kp-c'] }, { tabs: ['kp-a', 'kp-b'] }] };
+
+        /* A server: every answer late, and every write refused. */
+        const make = (answer) => createPanes({
+            root, catalog: ['kp-a', 'kp-b', 'kp-c'],
+            mode: 'm', layouts: { m: layout, n: layout },
+            on: true, media: 'all', param: 'kept',
+            storage: {
+                getItem: () => wait(150).then(() => answer),
+                setItem: () => Promise.reject(new Error('refused')),
+                removeItem: () => Promise.reject(new Error('refused')),
+            },
+            onLayout: (tree, mode) => heard.push({ tree, mode }),
+        });
+
+        const tabsOf = (tree) => JSON.stringify(
+            tree.tabs ?? tree.kids.map((k) => k.tabs));
+
+        let panes = make(JSON.stringify(kept));
+
+        const first = tabsOf(panes.layout());
+
+        await wait(300);
+
+        const late = tabsOf(panes.layout());
+        const quiet = heard.length;
+
+        panes.close('kp-b');
+
+        const closed = heard.at(-1);
+
+        closed.tree.kids = [];
+
+        const copied = panes.layout().kids !== undefined;
+
+        /* A press on a divider that goes nowhere, and one that does. */
+        const bar = root.querySelector('.panesplit');
+        const r = bar.getBoundingClientRect();
+        const at = { clientX: r.left + r.width / 2,
+                     clientY: r.top + r.height / 2,
+                     pointerId: 1, bubbles: true, isPrimary: true };
+
+        bar.setPointerCapture = () => {};
+        bar.dispatchEvent(new PointerEvent('pointerdown', at));
+        bar.dispatchEvent(new PointerEvent('pointerup', at));
+
+        const pressed = heard.length;
+
+        bar.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight',
+                                                         bubbles: true }));
+
+        const keyed = heard.length;
+
+        panes.mode('n');
+        panes.setLayouts({ m: layout, n: kept });
+
+        const swapped = heard.length;
+
+        panes.reset();
+
+        const reset = heard.at(-1);
+
+        panes.destroy();
+
+        /* And a person faster than the server: what they did stands. */
+        panes = make(JSON.stringify(kept));
+        panes.close('kp-c');
+        await wait(300);
+
+        const faster = tabsOf(panes.layout());
+
+        panes.destroy();
+
+        /* And a server with nothing kept, or nonsense: the default. */
+        panes = make('not a layout');
+        await wait(300);
+
+        const nonsense = tabsOf(panes.layout());
+
+        panes.destroy();
+        root.remove();
+        await wait(50);
+
+        return { first, late, quiet, closed: closed.mode, copied,
+                 pressed: pressed - heard.indexOf(closed) - 1,
+                 keyed: keyed - pressed, swapped: swapped - keyed,
+                 reset: reset.mode === 'n' && tabsOf(reset.tree),
+                 faster, nonsense, loose,
+                 want: { layout: tabsOf(layout), kept: tabsOf(kept) } };
+    });
+
+    check(told.first === told.want.layout && told.late === told.want.kept,
+          'a layout kept somewhere that answers later: the default first, ' +
+          `then what was kept: ${told.first} then ${told.late}`);
+
+    check(told.quiet === 0,
+          'and loading it is not a change anybody made');
+
+    check(told.closed === 'm' && told.copied,
+          'onLayout hears a pane closed, with the mode and a copy');
+
+    check(told.pressed === 0 && told.keyed === 1,
+          'and a divider moved, but not a divider pressed and let go: ' +
+          `${told.pressed} ${told.keyed}`);
+
+    check(told.swapped === 0,
+          `and not a mode or a set of layouts swapped in: ${told.swapped}`);
+
+    check(told.reset === told.want.kept,
+          `and a reset, with the layout it went back to: ${told.reset}`);
+
+    check(told.faster === '["kp-a","kp-b"]',
+          'a person who moves something before the kept layout arrives ' +
+          `keeps what they did: ${told.faster}`);
+
+    check(told.nonsense === told.want.layout,
+          `and a kept layout that is nonsense is the default: ${told.nonsense}`);
+
+    check(told.loose === 0,
+          `and a write the server refuses is not left unhandled: ${told.loose}`);
+
+    await own.close();
+    }
 }
 catch (e)
 {
