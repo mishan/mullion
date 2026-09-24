@@ -88,6 +88,12 @@ a person does destroys a pane — closing one puts it away. Panes come and
 go only when the page says so, with `add` and `remove`, and even then
 the element is the page's: mullion makes none and deletes none.
 
+Brought back, from the drawer or by `present()`, a pane goes where it
+was: into the stack it left, or — if it was the last pane in its leaf
+and the split around it collapsed — beside the same neighbor, on the same
+side, with the same share. Where that neighbor has gone too, it goes to
+the pane last focused.
+
 ## What a person can do
 
 | | what it does |
