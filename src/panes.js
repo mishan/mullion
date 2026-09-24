@@ -622,10 +622,55 @@ export function createPanes ({ root, catalog, layouts, mode,
     /* A promise from the storage, which is a server's answer: a write
        that fails is the same as one that throws, and is not left for the
        window to report as unhandled. */
-    const quiet = (r) =>
+    /* The storage's work, one thing at a time where it answers later.
+     *
+     * A server takes writes in whatever order they arrive, and a slow
+     * one can land after the one that followed it -- an old layout put
+     * back over a new one, or over a reset. So each waits for the last,
+     * a read waits for the writes before it, and a failure is the same
+     * as one that throws: not left for the window to report. A storage
+     * that answers at once is called at once.
+     */
+    let queue = null;
+
+    const track = (p) =>
     {
-        if (typeof r?.then === 'function')
-            r.then(undefined, () => {});
+        const mine = Promise.resolve(p).then(() => {}, () => {});
+
+        queue = mine;
+        mine.then(() =>
+        {
+            if (queue === mine)
+                queue = null;
+        });
+    };
+
+    const write = (op) =>
+    {
+        const run = () =>
+        {
+            try
+            {
+                return op();
+            }
+            catch
+            {
+                /* A browser that refuses to remember is a browser that
+                   opens on the default, which is a layout and not a
+                   failure. */
+                return undefined;
+            }
+        };
+
+        if (queue !== null)
+            track(queue.then(run));
+        else
+        {
+            const r = run();
+
+            if (typeof r?.then === 'function')
+                track(r);
+        }
     };
 
     /* What is kept: the tree, or -- where the page has said which version
@@ -651,43 +696,87 @@ export function createPanes ({ root, catalog, layouts, mode,
             ? trimmed : { version, layout: trimmed });
     };
 
-    const save = () =>
-    {
-        try
-        {
-            quiet(storage.setItem(key(), kept()));
-        }
-        catch
-        {
-            /* A browser that refuses to remember is a browser that
-               opens on the default, which is a layout and not a
-               failure. */
-        }
-    };
-
     /* How many times the layout has been asked for or changed. A saved
        layout that arrives late is put up only if nothing has happened
        since it was asked for: what somebody did in the meantime is newer
        than what they did last visit. */
     let edits = 0;
 
+    /* The load a kept layout is still on its way for, if one is; and
+       whether the page has been told of a layout since it was asked for,
+       which it will have to be told of again once it comes. While one is
+       on its way nothing is written: what is in the storage is what is
+       coming, and the default up in the meantime is not worth keeping
+       over it. */
+    let waiting = 0;
+    let owed = false;
+
+    /* The layout as the page was last told of it, or as it was loaded:
+       what a change is a change from. */
+    let last = null;
+
+    const snapshot = () => JSON.stringify(tree);
+
+    const save = () =>
+    {
+        if (waiting !== 0 || tree === null)
+            return;
+
+        const text = kept();
+        const at = key();
+
+        write(() => storage.setItem(at, text));
+    };
+
+    /* Kept and told of, if it is anything new: what the page does to the
+       layout on its own account, such as putting a pane it has just
+       added somewhere, and the end of everything a person does. Not
+       counted as somebody's change, so a kept layout on its way is still
+       put up when it comes -- with this done again over it. True if it
+       was new. */
+    const told = () =>
+    {
+        const now = snapshot();
+
+        if (now === last)
+            return false;
+
+        last = now;
+        owed ||= waiting !== 0;
+        save();
+        onLayout(structuredClone(tree), where);
+
+        return true;
+    };
+
     /* Somebody changed the layout: it is kept, and the page is told, with
        a copy -- which is what a page keeping layouts somewhere of its own
-       needs, and a page offering undo, and one that only wants to know. */
+       needs, and a page offering undo, and one that only wants to know.
+       Newer than any kept layout still on its way, which is not put up
+       when it comes. A change that changed nothing -- a pane raised that
+       was in front, a divider pressed at its limit -- is none of these. */
     const changed = () =>
     {
+        if (snapshot() === last)
+            return;
+
         edits++;
+        waiting = 0;
+        owed = false;
         told();
     };
 
-    /* Kept and told of, without counting as somebody's change: what the
-       page does to the layout on its own account, such as putting a pane
-       it has just added somewhere. A kept layout on its way from a server
-       is newer than that, and is still put up when it comes. */
-    const told = () =>
+    /* What the page asked for while a kept layout was on its way, done
+       again over it once it comes: a pane raised at somebody. */
+    const raised = new Set();
+
+    /* A kept layout on its way no longer wanted: another is being put
+       up, from another store or mode or from nothing. */
+    const abandon = () =>
     {
-        save();
-        onLayout(structuredClone(tree), where);
+        waiting = 0;
+        owed = false;
+        raised.clear();
     };
 
     /* A saved layout, as the page's own tree: or null, for one that is
@@ -736,27 +825,21 @@ export function createPanes ({ root, catalog, layouts, mode,
         const at = key();
         let saved = null;
 
+        abandon();
+
         try
         {
-            const got = storage.getItem(at);
+            /* After any write still going, so as to read what it wrote. */
+            const got = queue !== null
+                ? queue.then(() => storage.getItem(at))
+                : storage.getItem(at);
 
             if (typeof got?.then === 'function')
-                got.then((text) =>
-                {
-                    const kept = read(text);
-
-                    if (kept === null || dead || ask !== edits ||
-                        at !== key())
-                        return;
-
-                    tree = kept;
-
-                    if (stray())
-                        told();
-
-                    if (tiled)
-                        render();
-                }, () => {});
+            {
+                waiting = ask;
+                got.then((text) => arrive(ask, at, text),
+                         () => arrive(ask, at, null));
+            }
             else
                 saved = read(got);
         }
@@ -766,9 +849,67 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
 
         tree = saved ?? fresh();
+        last = snapshot();
+        stray();
+        told();
+    };
 
-        if (stray())
-            told();
+    /* A kept layout, arrived. Put up if it is still the one asked for and
+     * nobody has changed anything since; with the panes the page added in
+     * the meantime put into it and the panes it raised raised again, and
+     * then kept and told of once -- the page may have been told of the
+     * default it replaces. Drawn before the page is told, so that nothing
+     * the page does about it leaves the screen behind.
+     */
+    const arrive = (ask, at, text) =>
+    {
+        if (waiting !== ask)
+            return;
+
+        waiting = 0;
+
+        const kept = dead || ask !== edits || at !== key() ? null
+                   : read(text);
+        const again = owed;
+
+        owed = false;
+
+        if (kept === null)
+        {
+            /* Nothing kept, or nothing usable: what is up stays, and is
+               what gets kept, if the page was told of it. */
+            if (again && !dead)
+                save();
+
+            raised.clear();
+
+            return;
+        }
+
+        tree = kept;
+        last = snapshot();
+        stray();
+
+        for (const id of raised)
+            if (playable(id))
+            {
+                const leaf = leafWith(id) ?? target(panes.get(id));
+
+                if (leafWith(id) === null)
+                    into(id, leaf);
+                else
+                    leaf.active = liveTabs(leaf).indexOf(id);
+            }
+
+        raised.clear();
+
+        if (tiled)
+            render();
+
+        if (again)
+            last = null;
+
+        told();
     };
 
     /* ---- moving a pane about ---- */
@@ -1107,18 +1248,26 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (strip !== null)
         {
+            /* The way the strip reads: in a page that reads leftward the
+               next tab is the one to the left, and a tab goes before one
+               by landing on its right. */
+            const rtl = backward(strip);
             const tabs = [...strip.querySelectorAll('.panetab')]
                 .map((t) => [t.id.replace(/^panetab-/, ''),
                              t.getBoundingClientRect()])
                 .filter(([other]) => other !== id);
-            const next = tabs.find(([, t]) => t.left + t.width / 2 > x);
+            const past = (t) => (rtl ? t.left + t.width / 2 < x
+                                     : t.left + t.width / 2 > x);
+            const next = tabs.find(([, t]) => past(t));
             const last = tabs.at(-1)?.[1];
+            const row = strip.getBoundingClientRect();
 
             return { drop: 'tab', leaf, box: strip,
                      before: next?.[0] ?? null,
-                     x: next !== undefined ? next[1].left
-                      : last !== undefined ? last.right
-                      : strip.getBoundingClientRect().left };
+                     x: next !== undefined ? (rtl ? next[1].right
+                                                  : next[1].left)
+                      : last !== undefined ? (rtl ? last.left : last.right)
+                      : rtl ? row.right : row.left };
         }
 
         const r = box.getBoundingClientRect();
@@ -1204,10 +1353,14 @@ export function createPanes ({ root, catalog, layouts, mode,
             let dragging = false;
             let where = null;
 
+            /* This pointer's, and no other's: a pen and a finger on the
+               same strip are two gestures. */
+            const mine = (m) => m.pointerId === e.pointerId;
+
             const move = (m) =>
             {
-                if (!dragging &&
-                    Math.hypot(m.clientX - from.x, m.clientY - from.y) < 5)
+                if (!mine(m) || (!dragging &&
+                    Math.hypot(m.clientX - from.x, m.clientY - from.y) < 5))
                     return;
 
                 dragging = true;
@@ -1224,7 +1377,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             const tidy = () =>
             {
-                tab.removeEventListener('pointermove', move);
+                window.removeEventListener('pointermove', move, true);
                 tab.classList.remove('panedragging');
                 root.classList.remove('panedrag');
                 mark(null);
@@ -1247,10 +1400,13 @@ export function createPanes ({ root, catalog, layouts, mode,
                 k.stopPropagation();
             };
 
-            const up = () =>
+            const up = (u) =>
             {
-                tab.removeEventListener('pointerup', up);
-                tab.removeEventListener('pointercancel', up);
+                if (!mine(u))
+                    return;
+
+                window.removeEventListener('pointerup', up, true);
+                window.removeEventListener('pointercancel', up, true);
                 window.removeEventListener('keydown', escape, true);
                 tidy();
 
@@ -1274,7 +1430,11 @@ export function createPanes ({ root, catalog, layouts, mode,
                 setTimeout(() =>
                     tab.removeEventListener('click', stop, true), 0);
 
-                if (where === null)
+                /* Let go over what a render since has taken away -- a
+                   leaf no longer in the tree, a pane the page removed,
+                   or everything, handed back -- is let go over nothing. */
+                if (where === null || dead || !panes.has(id) ||
+                    (where.leaf !== undefined && !holds(where.leaf)))
                     return;
 
                 const was = JSON.stringify(tree);
@@ -1297,11 +1457,16 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             /* The capture is what makes elementFromPoint the question
                being asked: without it the tab stops hearing the pointer
-               the moment it leaves its own box. */
+               the moment it leaves its own box. Heard on the window and
+               not on the tab, because a render while the pointer is down
+               -- a title, a pane added, a kept layout arriving -- makes
+               the tab again, and one taken out of the document hears
+               nothing: the drag would never end, and its Escape would be
+               the page's for good. */
             tab.setPointerCapture(e.pointerId);
-            tab.addEventListener('pointermove', move);
-            tab.addEventListener('pointerup', up);
-            tab.addEventListener('pointercancel', up);
+            window.addEventListener('pointermove', move, true);
+            window.addEventListener('pointerup', up, true);
+            window.addEventListener('pointercancel', up, true);
 
             /* Captured, and on the window: the focus may be anywhere, and
                an Escape that ended a drag is not also one for the page. */
@@ -1408,13 +1573,33 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
     };
 
-    /* Every box under this one that is scrolled away from its start. */
+    /* Every box under this one that is scrolled away from its start.
+     *
+     * Out of the boxes somebody has scrolled, which the document says as
+     * it happens, rather than out of every element there is: asking each
+     * where it is scrolled to lays out whatever is not drawn, and a pane
+     * of a hundred thousand rows took the best part of a second to close
+     * that way, and four in Firefox.
+     */
+    const scrolled = new Set();
+
+    const noteScroll = (e) =>
+    {
+        if (e.target instanceof Element && root.contains(e.target))
+            scrolled.add(e.target);
+    };
+
+    document.addEventListener('scroll', noteScroll, true);
+
     const scrolls = (under) =>
     {
         const found = [];
 
-        for (const box of [under, ...under.querySelectorAll('*')])
-            if (box.scrollLeft !== 0 || box.scrollTop !== 0)
+        for (const box of scrolled)
+            if (!box.isConnected)
+                scrolled.delete(box);
+            else if (under.contains(box) &&
+                     (box.scrollLeft !== 0 || box.scrollTop !== 0))
                 found.push([box, box.scrollLeft, box.scrollTop]);
 
         return found;
@@ -1429,16 +1614,17 @@ export function createPanes ({ root, catalog, layouts, mode,
                Chromium's renderer has crashed outright -- the page gone
                -- on a move into a box one of whose children had just
                been hidden or shown, before the move or after it: a pane
-               behind a tab is exactly that. A read of any computed style
-               either side is enough to prevent it, and `fillLeaf' also
-               settles which panes are hidden before it moves any. Both
-               stay until the browser's fix is what people have. */
-            void getComputedStyle(parent).display;
+               behind a tab is exactly that. Laying the document out
+               either side prevents it -- a read of a computed style is
+               not always enough, a read of a size is -- and `fillLeaf'
+               also settles which panes are hidden before it moves any.
+               Both stay until the browser's fix is what people have. */
+            void parent.offsetWidth;
 
             try
             {
                 parent.moveBefore(child, before);
-                void getComputedStyle(parent).display;
+                void parent.offsetWidth;
                 return;
             }
             catch
@@ -1877,21 +2063,21 @@ export function createPanes ({ root, catalog, layouts, mode,
        this is starting over from. */
     const reset = () =>
     {
-        try
-        {
-            quiet(storage.removeItem(key()));
-        }
-        catch
-        {
-            /* Nothing to forget, which is the same as forgetting. */
-        }
+        const at = key();
+
+        /* Nothing to forget is the same as forgetting. Not written over
+           with the default, either: a page's default may change, and a
+           layout nobody made is not one to keep. */
+        write(() => storage.removeItem(at));
 
         edits++;
+        abandon();
         zoom = null;
         tree = fresh();
         stray();
         focus = null;
         render();
+        last = snapshot();
         onLayout(structuredClone(tree), where);
     };
 
@@ -2492,6 +2678,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (dead || name === where)
                 return;
 
+            abandon();
             where = name;
             tree = null;
 
@@ -2562,7 +2749,9 @@ export function createPanes ({ root, catalog, layouts, mode,
                 made = null;
             }
 
-            if (made === null)
+            /* And one that names only panes still to come is no layout
+               yet, as it would not be read back. */
+            if (made === null || !holdsAny(made))
                 return false;
 
             zoom = null;
@@ -2625,7 +2814,13 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             focus = leaf;
             unzoomFor(leaf);
-            changed();
+
+            /* The page's doing, not a person's: a kept layout still on
+               its way is still put up, with this pane raised in it. */
+            if (waiting !== 0)
+                raised.add(id);
+
+            told();
             render();
 
             if (take)
@@ -2679,6 +2874,13 @@ export function createPanes ({ root, catalog, layouts, mode,
                 !el.hasAttribute('data-pane'))
                 return false;
 
+            /* A place kept for it, and what is in front there now: a pane
+               put back where it was, quietly, is put back behind what was
+               in front of it, as it was left. */
+            const dormant = tree === null ? null : leafWith(id);
+            const front = dormant === null ? undefined
+                        : liveTabs(dormant)[dormant.active ?? 0];
+
             const p = enlist(id, el);
 
             p.added = true;
@@ -2706,7 +2908,8 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (leafWith(id) === null)
                 into(id, leaf);
             else
-                leaf.active = liveTabs(leaf).indexOf(id);
+                leaf.active = liveTabs(leaf).indexOf(
+                    take || front === undefined ? id : front);
 
             /* Told of, and not counted as somebody's change: a page
                putting back the files that were open when it last closed
@@ -2776,8 +2979,9 @@ export function createPanes ({ root, catalog, layouts, mode,
             restore(p);
             panes.delete(id);
 
+            /* The page's doing, as `add' is. */
             if (held)
-                changed();
+                told();
 
             if (tiled)
             {
@@ -2837,9 +3041,10 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (dead)
                 return;
 
-            if (tree !== null && tiled)
-                save();
-
+            /* The layout that is up was kept when it was made, and a
+               default on screen while a kept one is on its way is not
+               to be kept over it. */
+            abandon();
             layouts = next;
             store = to;
             split = thick;
@@ -2872,6 +3077,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             dead = true;
             window.removeEventListener('keydown', command);
             document.removeEventListener('visibilitychange', settle);
+            document.removeEventListener('scroll', noteScroll, true);
             screen.removeEventListener('change', apply);
 
             for (const p of panes.values())
@@ -2885,7 +3091,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             document.body.classList.remove('tiled');
             render();
 
-            root.classList.remove('panesroot', 'panescroll');
+            root.classList.remove('panesroot', 'panescroll', 'panedrag');
             root.style.removeProperty('--pane-split');
             /* What the page put in the overlay is the page's, and goes
                back to the body it came from rather than out with it. */

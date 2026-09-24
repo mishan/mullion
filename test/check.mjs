@@ -1494,9 +1494,10 @@ try
           `setLayouts puts the new set's layout up: ${swapped.leaves} ` +
           `leaf, ${swapped.front} in front`);
 
-    check(swapped.saved === 'panes:m side:m' && swapped.back,
+    check(swapped.saved === 'panes:m' && swapped.back,
           'and each set is kept under its own store, the first coming ' +
-          `back as it was left: ${swapped.saved}`);
+          'back as it was left, and one nobody changed not written at ' +
+          `all: ${swapped.saved}`);
 
     check(swapped.moved === 0,
           'and no pane went back to the document on the way');
@@ -2584,7 +2585,10 @@ try
         const before = window.epKept.get('panes:m').includes('ep-gone');
 
         window.epLater.delete('ep-gone');
-        panes.present('ep-y');
+
+        /* A change, so that something is kept: ep-y went in front of
+           ep-a when the layout came up without it. */
+        panes.present('ep-a');
 
         const after = window.epKept.get('panes:m').includes('ep-gone');
 
