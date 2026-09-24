@@ -1,4 +1,4 @@
-# The tests are a browser driving demo/index.html, which is the whole
+# The tests are a browser driving test/fixture/index.html, which is the whole
 # claim this module makes: that it adopts a document and puts it back. So
 # there is one job, once per browser: Chromium moves a pane with
 # `moveBefore' and keeps what it was doing, and the others are where the

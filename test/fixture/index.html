@@ -4,20 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>mullion</title>
-<link rel="stylesheet" href="../src/panes.css">
-<link rel="stylesheet" href="demo.css">
+<title>mullion fixture</title>
+<link rel="stylesheet" href="../../src/panes.css">
+<link rel="stylesheet" href="fixture.css">
 </head>
 <body>
 
 <!--
-  A page that exists to be tiled: the demo, and what test/check.mjs
-  drives.
+  A page that exists to be tiled, and what test/check.mjs drives. The
+  demo people look at is demo/; this one is shaped by the tests.
 
-  One page for both because what mullion promises is about a document --
-  that it adopts one, puts it back, and keeps every id on the way -- and
-  a claim about a document needs one with enough in it to be worth
-  making: a <details> that folds, a <section> that does not, a canvas
+  What mullion promises is about a document -- that it adopts one, puts
+  it back, and keeps every id on the way -- and a claim about a document
+  needs one with enough in it to be worth making: a <details> that folds, a <section> that does not, a canvas
   whose work is observable, a box that scrolls sideways, a text box a
   chord must not reach, and a popover that would be clipped by the pane
   it belongs beside.
@@ -89,6 +88,6 @@
 
 <div id="fx-menu" class="popover" hidden>A popover.</div>
 
-<script type="module" src="demo.js"></script>
+<script type="module" src="fixture.js"></script>
 </body>
 </html>

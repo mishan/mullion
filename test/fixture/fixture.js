@@ -5,12 +5,11 @@
  */
 
 /*
- * demo.js -- the least a consumer of mullion can be.
+ * fixture.js -- the least a consumer of mullion can be.
  *
  * A catalog, a layout per mode, an onShow that does something
  * observable, and a handle for the harness to ask questions through.
- * Read it as the README's long example; test/check.mjs drives it as a
- * fixture.
+ * test/check.mjs drives it; demo/ is the page for people.
  *
  * The two canvases are the point of the file. `onShow' is the contract
  * that makes tiling pay for itself rather than cost, and the only way to
@@ -19,8 +18,8 @@
  * when it is not, and says which through `drawing()'.
  */
 
-import { createPanes } from '../src/panes.js';
-import { placePopover } from '../src/popover.js';
+import { createPanes } from '../../src/panes.js';
+import { placePopover } from '../../src/popover.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -106,7 +105,7 @@ const panes = createPanes({
     catalog: CATALOG,
     layouts: LAYOUTS,
     mode: $('mode').value,
-    store: 'mullion-demo',
+    store: 'mullion-fixture',
     on: true,
     onShow: (id, on) =>
     {
