@@ -163,7 +163,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                                strip = 'shrink', lone = true,
                                closed: label = 'Closed:',
                                reset: again = null,
-                               onLayout = () => {} })
+                               onLayout = () => {}, version })
 {
     /* The commands, with a page's own over the defaults rather than
        instead of them: overriding the one chord that clashes should not
@@ -517,11 +517,24 @@ export function createPanes ({ root, catalog, layouts, mode,
             r.then(undefined, () => {});
     };
 
+    /* What is kept: the tree, or -- where the page has said which version
+     * of its layouts this is -- the tree with that version on it.
+     *
+     * The version is how a page changes its mind. A kept layout outlives
+     * the default it was made from, so a page that moves a pane, or adds
+     * one, would otherwise go on showing everybody who has been here
+     * before what they left -- the new pane in the drawer, where nobody
+     * looks. A layout kept under another version is not read back, and
+     * the page's new default is what comes up.
+     */
+    const kept = () => JSON.stringify(
+        version === undefined ? tree : { version, layout: tree });
+
     const save = () =>
     {
         try
         {
-            quiet(storage.setItem(key(), JSON.stringify(tree)));
+            quiet(storage.setItem(key(), kept()));
         }
         catch
         {
@@ -548,12 +561,15 @@ export function createPanes ({ root, catalog, layouts, mode,
     };
 
     /* A saved layout, as the page's own tree: or null, for one that is
-       not there, does not parse, or keeps nothing this page has. */
+       not there, does not parse, was kept under another version, or keeps
+       nothing this page has. */
     const read = (text) =>
     {
         try
         {
-            const saved = JSON.parse(text);
+            const got = JSON.parse(text);
+            const saved = version === undefined ? got
+                : got?.version === version ? got.layout ?? null : null;
 
             return saved !== null && sane(saved) ? known(saved) : null;
         }
@@ -700,19 +716,32 @@ export function createPanes ({ root, catalog, layouts, mode,
             empty(leaf);
     };
 
-    /* Into a leaf, as the tab in front of it. */
-    const into = (id, leaf) =>
+    /* Into a leaf, as the tab in front of it: before the tab named, at
+       the end of the strip for null, or -- for nothing said -- at the
+       end, unless it is in this leaf already. By name and not by place,
+       since taking this one out of the strip first moves every place
+       after it. */
+    const into = (id, leaf, before) =>
     {
-        if (leafWith(id) === leaf && leaf.tabs.length === 1)
+        /* Into the leaf it is already in, and nowhere in particular: in
+           front, where it was. Moving it to the end of the strip was
+           never what that asked. */
+        if (leafWith(id) === leaf && before === undefined)
+        {
+            leaf.active = liveTabs(leaf).indexOf(id);
             return;
+        }
 
         drawer(id);
-        leaf.tabs.push(id);
+
+        const at = typeof before === 'string' ? leaf.tabs.indexOf(before) : -1;
+
+        leaf.tabs.splice(at === -1 ? leaf.tabs.length : at, 0, id);
 
         /* Counted over the tabs in play and not over all of them:
            `active' is an index into the first, and a leaf holding a pane
            whose mode is down has fewer of the one than the other. */
-        leaf.active = liveTabs(leaf).length - 1;
+        leaf.active = liveTabs(leaf).indexOf(id);
     };
 
     /* And beside one, which is what splitting is: the leaf is replaced by
@@ -771,8 +800,9 @@ export function createPanes ({ root, catalog, layouts, mode,
 
     /* ---- dragging a tab ---- */
 
-    /* Where a tab would land if it were let go here: a leaf to be moved
-       into, an edge of one to be split off, or the drawer. */
+    /* Where a tab would land if it were let go here: a place in a strip,
+       a leaf to be moved into, an edge of one to be split off, or the
+       drawer. */
     const under = (x, y, id) =>
     {
         const at = document.elementFromPoint(x, y);
@@ -793,6 +823,28 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (leaf === undefined)
             return null;
+
+        /* Over the strip, which is a row of places: before the first tab
+           whose middle is past the pointer, or after the last. The tab
+           being dragged is not a place -- it is what is moving -- so
+           holding it over itself puts it back where it was. */
+        const strip = at.closest('.panetabs');
+
+        if (strip !== null)
+        {
+            const tabs = [...strip.querySelectorAll('.panetab')]
+                .map((t) => [t.id.replace(/^panetab-/, ''),
+                             t.getBoundingClientRect()])
+                .filter(([other]) => other !== id);
+            const next = tabs.find(([, t]) => t.left + t.width / 2 > x);
+            const last = tabs.at(-1)?.[1];
+
+            return { drop: 'tab', leaf, box: strip,
+                     before: next?.[0] ?? null,
+                     x: next !== undefined ? next[1].left
+                      : last !== undefined ? last.right
+                      : strip.getBoundingClientRect().left };
+        }
 
         const r = box.getBoundingClientRect();
         const fx = (x - r.left) / r.width;
@@ -829,6 +881,21 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         const r = (where.box ?? root).getBoundingClientRect();
         const o = root.getBoundingClientRect();
+
+        /* A place in a strip is a line between two tabs, not a box. */
+        hint.classList.toggle('paneslot', where.drop === 'tab');
+
+        if (where.drop === 'tab')
+        {
+            hint.hidden = false;
+            hint.style.left = `${where.x - o.left}px`;
+            hint.style.top = `${r.top - o.top}px`;
+            hint.style.width = '';
+            hint.style.height = `${r.height}px`;
+
+            return;
+        }
+
         const half = where.drop === 'beside';
         const row = where.dir === 'row';
 
@@ -874,14 +941,37 @@ export function createPanes ({ root, catalog, layouts, mode,
                 mark(where);
             };
 
-            const up = () =>
+            const tidy = () =>
             {
                 tab.removeEventListener('pointermove', move);
-                tab.removeEventListener('pointerup', up);
-                tab.removeEventListener('pointercancel', up);
                 tab.classList.remove('panedragging');
                 root.classList.remove('panedrag');
                 mark(null);
+            };
+
+            /* Escape, which is how anybody expects to take back a drag
+             * they did not mean. The tab stops following the pointer and
+             * the hint goes, but the pointer is still held down: letting
+             * go of it later is still the end of a drag, and still not a
+             * click on whatever tab it is over.
+             */
+            const escape = (k) =>
+            {
+                if (k.key !== 'Escape' || !dragging)
+                    return;
+
+                where = null;
+                tidy();
+                k.preventDefault();
+                k.stopPropagation();
+            };
+
+            const up = () =>
+            {
+                tab.removeEventListener('pointerup', up);
+                tab.removeEventListener('pointercancel', up);
+                window.removeEventListener('keydown', escape, true);
+                tidy();
 
                 if (!dragging)
                     return;
@@ -906,14 +996,21 @@ export function createPanes ({ root, catalog, layouts, mode,
                 if (where === null)
                     return;
 
+                const was = JSON.stringify(tree);
+
                 if (where.drop === 'drawer')
                     drawer(id);
+                else if (where.drop === 'tab')
+                    into(id, where.leaf, where.before);
                 else if (where.drop === 'into')
                     into(id, where.leaf);
                 else
                     beside(id, where.leaf, where.dir, where.after);
 
-                changed();
+                /* A tab let go where it was is not a new layout. */
+                if (JSON.stringify(tree) !== was)
+                    changed();
+
                 render();
             };
 
@@ -924,6 +1021,10 @@ export function createPanes ({ root, catalog, layouts, mode,
             tab.addEventListener('pointermove', move);
             tab.addEventListener('pointerup', up);
             tab.addEventListener('pointercancel', up);
+
+            /* Captured, and on the window: the focus may be anywhere, and
+               an Escape that ended a drag is not also one for the page. */
+            window.addEventListener('keydown', escape, true);
         });
     };
 
@@ -2070,6 +2171,47 @@ export function createPanes ({ root, catalog, layouts, mode,
            itself later. */
         layout: () => (tree === null ? null : structuredClone(tree)),
 
+        /* And the other way: a layout put up, for the mode that is up --
+         * a preset, one read out of a link, a step back through an undo.
+         * Kept and told of like any other change, since it is one.
+         *
+         * Read the way a kept layout is read, because it is data from
+         * somewhere just as much: a pane this page has never heard of is
+         * dropped rather than refused, and a tree that is not the shape
+         * of one is refused -- false, and the layout left as it was --
+         * rather than half put up. Written whether or not it is tiled
+         * now, so that it is what comes up when it is.
+         */
+        setLayout: (next) =>
+        {
+            if (dead)
+                return false;
+
+            let made = null;
+
+            try
+            {
+                made = sane(next) ? known(structuredClone(next)) : null;
+            }
+            catch
+            {
+                made = null;
+            }
+
+            if (made === null)
+                return false;
+
+            zoom = null;
+            focus = null;
+            tree = made;
+            changed();
+
+            if (tiled)
+                render();
+
+            return true;
+        },
+
         /* Back to the mode's default, as Alt 0 does. */
         reset: () =>
         {
@@ -2153,7 +2295,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         /* Another set of layouts, in place: the layout that is up is kept
          * under the store it came from, and the mode's layout from the
          * new set -- what was saved under the new store, or its default --
-         * replaces it. With a new divider thickness if one is given.
+         * replaces it. With a new divider thickness and a new version
+         * if they are given.
          *
          * For a page with more than one shape to be: a phone turned on
          * its side has neither the height for the split it had upright
@@ -2161,7 +2304,8 @@ export function createPanes ({ root, catalog, layouts, mode,
          * this it was destroy() and a second createPanes, and every pane
          * put back into the document only to be adopted again.
          */
-        setLayouts: (next, { store: to = store, split: thick = split } = {}) =>
+        setLayouts: (next, { store: to = store, split: thick = split,
+                             version: now = version } = {}) =>
         {
             if (dead)
                 return;
@@ -2172,6 +2316,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             layouts = next;
             store = to;
             split = thick;
+            version = now;
             root.style.setProperty('--pane-split', `${split}px`);
 
             zoom = null;

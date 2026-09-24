@@ -100,6 +100,11 @@ export interface PanesOptions {
    *  is for. Not called for a layout loaded, or swapped in by a mode or
    *  `setLayouts`. */
   onLayout?: (layout: PaneNode, mode: string) => void;
+  /** Which version of the page's layouts this is. A layout kept under
+   *  another version -- or under none, before a page first gave one -- is
+   *  not read back, and the default comes up instead: the way to make a
+   *  changed default reach people who have been here before. */
+  version?: string | number;
 }
 
 export interface PaneKeys {
@@ -131,6 +136,10 @@ export interface Panes {
   overlay(): HTMLElement;
   /** The layout as it stands, copied. */
   layout(): PaneNode | null;
+  /** Put up a layout for the mode that is up, keep it, and tell
+   *  `onLayout`. Panes the page does not have are dropped; a tree that is
+   *  not the shape of a layout is refused, and this returns false. */
+  setLayout(layout: PaneNode): boolean;
   /** Back to the mode's default layout, forgetting the one kept for it:
    *  what Alt 0 does. */
   reset(): void;
@@ -146,9 +155,10 @@ export interface Panes {
   tiled(): boolean;
   /** Another set of layouts, in place: the layout that is up is saved
    *  under its store, and the mode's layout from the new set replaces it.
-   *  Optionally a new store prefix and divider thickness. */
+   *  Optionally a new store prefix, divider thickness and version. */
   setLayouts(layouts: Record<string, PaneNode>,
-             opts?: { store?: string; split?: number }): void;
+             opts?: { store?: string; split?: number;
+                      version?: string | number }): void;
   /** Put every pane back under its own parent, take every listener off
    *  the window and the media query, and leave the page as it was found.
    *  Quiet if it has already been called; the handle does nothing after

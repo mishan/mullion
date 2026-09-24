@@ -91,7 +91,7 @@ nowhere in here that makes one.
 
 | | what it does |
 |---|---|
-| drag a tab | onto a pane to stack, onto an edge to split, onto the drawer to close |
+| drag a tab | onto a tab strip to put it there, onto a pane to stack, onto an edge to split, onto the drawer to close; `Esc` to take it back |
 | the cross on a tab | close it to the drawer |
 | a divider | drag, or focus it and use the arrows; double-click to even up |
 | `Alt` + arrow | move the focus to the pane that way |
@@ -147,11 +147,12 @@ Everything below is a default rather than a rule.
 | `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
 | `closed` | the drawer's label | `'Closed:'` |
 | `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
+| `version` | which version of your layouts this is; a layout kept under another is not read back | — |
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
-`layout()`, `reset()`, `overlay()`, `tiled()`,
-`setLayouts(layouts, { store, split })`, `destroy()`.
+`layout()`, `setLayout(layout)`, `reset()`, `overlay()`, `tiled()`,
+`setLayouts(layouts, { store, split, version })`, `destroy()`.
 
 `setLayouts` swaps in another set of layouts without taking the tiler
 down: the layout that is up is saved under its store, and the mode's
@@ -191,6 +192,23 @@ createPanes({
   },
   onLayout: (layout, mode) => history.push({ layout, mode }),
 });
+```
+
+`setLayout(layout)` goes the other way: it puts a layout up for the mode
+that is up — a preset, one read out of a link, a step back through that
+undo — and keeps it and tells `onLayout` like any other change. It is read
+the way a kept layout is read: a pane the page does not have is dropped,
+and a tree that is not the shape of a layout is refused and `false` is
+returned.
+
+A kept layout outlives the default it was made from, so when you move a
+pane in your defaults, or add one, somebody who has been here before goes
+on seeing what they left, with the new pane in the drawer. `version` is
+how you tell them: a layout kept under another version, or kept before
+there was one, is not read back, and your new default comes up.
+
+```js
+createPanes({ /* … */ version: 3 });
 ```
 
 `destroy()` is the way back out: every pane under its own parent again,

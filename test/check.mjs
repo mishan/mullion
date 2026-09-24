@@ -1629,6 +1629,326 @@ try
 
     await own.close();
     }
+
+    /* ---- a layout the page changed its mind about, and one it puts up
+     *
+     * A kept layout outlives the default it was made from: `version' is
+     * how a page says so. And `setLayout', which is a preset or a link or
+     * an undo -- data from somewhere, read the way a kept layout is.
+     */
+    {
+    const own = await browser.newPage({ viewport: WIDE });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    const versioned = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const root = document.createElement('div');
+        const kept = new Map();
+        const heard = [];
+
+        const box = (id) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneMin = '40';
+
+            return el;
+        };
+
+        Object.assign(root.style, { position: 'fixed', inset: '0',
+                                    zIndex: '10', background: 'white',
+                                    display: 'flex',
+                                    flexDirection: 'column' });
+        document.body.append(root, box('vs-a'), box('vs-b'), box('vs-c'));
+
+        const layout = { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['vs-a', 'vs-b'] }, { tabs: ['vs-c'] }] };
+        const old = { tabs: ['vs-c', 'vs-b'], active: 0 };
+
+        const make = (version) => createPanes({
+            root, catalog: ['vs-a', 'vs-b', 'vs-c'],
+            mode: 'm', layouts: { m: layout }, version,
+            on: true, media: 'all', param: 'versioned',
+            storage: { getItem: (k) => kept.get(k) ?? null,
+                       setItem: (k, v) => kept.set(k, v),
+                       removeItem: (k) => kept.delete(k) },
+            onLayout: (tree) => heard.push(tree),
+        });
+
+        const tabsOf = (tree) => JSON.stringify(
+            tree.tabs ?? tree.kids.map((k) => k.tabs));
+
+        /* Kept before the page had a version at all. */
+        kept.set('panes:m', JSON.stringify(old));
+
+        let panes = make(undefined);
+
+        const unversioned = tabsOf(panes.layout());
+
+        panes.destroy();
+        panes = make(2);
+
+        const fresh = tabsOf(panes.layout());
+
+        panes.close('vs-b');
+
+        const closed = tabsOf(panes.layout());
+        const written = JSON.parse(kept.get('panes:m'));
+
+        panes.destroy();
+        panes = make(2);
+
+        const same = tabsOf(panes.layout());
+
+        panes.destroy();
+        panes = make(3);
+
+        const newer = tabsOf(panes.layout());
+
+        /* And a layout put up by the page: a pane it does not have is
+           dropped, and a tree that is no layout is refused. */
+        const told = heard.length;
+        const put = panes.setLayout({ dir: 'col', size: [1, 2], kids: [
+            { tabs: ['vs-c', 'vs-nowhere'] },
+            { tabs: ['vs-b', 'vs-a'], active: 1 }] });
+        const after = panes.layout();
+        const front = document.querySelector(
+            '#panetab-vs-a[aria-selected="true"]') !== null;
+        const heardPut = heard.length - told;
+        const stored = tabsOf(JSON.parse(kept.get('panes:m')).layout);
+        const refused = [
+            panes.setLayout({ dir: 'row', size: [1], kids: [] }),
+            panes.setLayout(null),
+            panes.setLayout({ tabs: ['vs-nowhere'] }),
+        ];
+        const untouched = tabsOf(panes.layout()) === tabsOf(after);
+
+        panes.destroy();
+        root.remove();
+
+        return { unversioned, fresh, written, closed, same, newer,
+                 put, after: tabsOf(after), front, heardPut, stored,
+                 refused, untouched, heardAfter: heard.length - told,
+                 want: { layout: tabsOf(layout), old: tabsOf(old) } };
+    });
+
+    check(versioned.unversioned === versioned.want.old,
+          'with no version, a kept layout comes back as before');
+
+    check(versioned.fresh === versioned.want.layout,
+          'and once the page has one, a layout kept without it is not ' +
+          `read back: ${versioned.fresh}`);
+
+    check(versioned.written.version === 2 &&
+          versioned.written.layout !== undefined,
+          'what is kept is kept with the version on it');
+
+    check(versioned.same !== versioned.want.layout &&
+          versioned.same === versioned.closed,
+          `and read back under the same one: ${versioned.same}`);
+
+    check(versioned.newer === versioned.want.layout,
+          `and not under the next: ${versioned.newer}`);
+
+    check(versioned.put &&
+          versioned.after === '[["vs-c"],["vs-b","vs-a"]]' &&
+          versioned.front,
+          'setLayout puts a layout up, dropping a pane the page does not ' +
+          `have: ${versioned.after}`);
+
+    check(versioned.heardPut === 1 && versioned.stored === versioned.after,
+          'and it is kept and told of like any other change');
+
+    check(versioned.refused.every((r) => r === false) &&
+          versioned.untouched && versioned.heardAfter === 1,
+          'and a tree that is no layout is refused, leaving the one ' +
+          `there: ${versioned.refused}`);
+
+    /* ---- a strip is a row of places ----
+     *
+     * By the mouse, since this is about where a pointer is: a tab let go
+     * over a strip goes between the two tabs either side of it, from its
+     * own leaf or another. Let go over its own leaf it stays where it
+     * is. And Escape takes a drag back.
+     */
+    const heard = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const root = document.createElement('div');
+        const box = (id) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneMin = '40';
+            el.dataset.paneTitle = id.slice(3).toUpperCase().repeat(6);
+
+            return el;
+        };
+
+        Object.assign(root.style, { position: 'fixed', inset: '0',
+                                    zIndex: '10', background: 'white',
+                                    display: 'flex',
+                                    flexDirection: 'column' });
+        document.body.append(root, box('st-a'), box('st-b'), box('st-c'),
+                             box('st-d'));
+
+        window.stripHeard = [];
+        window.stripPanes = createPanes({
+            root, catalog: ['st-a', 'st-b', 'st-c', 'st-d'],
+            mode: 'm', on: true, media: 'all', param: 'strip',
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['st-a', 'st-b', 'st-c'] }, { tabs: ['st-d'] }] } },
+            storage: { getItem: () => null, setItem: () => {},
+                       removeItem: () => {} },
+            onLayout: (tree) => window.stripHeard.push(tree),
+        });
+
+        return true;
+    });
+
+    const strips = () => own.evaluate(() =>
+    {
+        const tree = window.stripPanes.layout();
+
+        return JSON.stringify(tree.tabs ? [tree.tabs]
+                                        : tree.kids.map((k) => k.tabs));
+    });
+    const centerOf = async (sel, fx = 0.5, fy = 0.5) =>
+    {
+        const b = await own.locator(sel).boundingBox();
+
+        return { x: b.x + b.width * fx, y: b.y + b.height * fy };
+    };
+    let start = null;
+
+    const hold = async (sel) =>
+    {
+        start = await centerOf(sel);
+
+        await own.mouse.move(start.x, start.y);
+        await own.mouse.down();
+    };
+
+    /* Measured once the drag has begun, and not before: a drag shows
+       the drawer, which is a row above the layout that was not there. */
+    const toward = async (sel, fx, fy) =>
+    {
+        await own.mouse.move(start.x + 8, start.y, { steps: 2 });
+
+        const p = await centerOf(sel, fx, fy);
+
+        await own.mouse.move(p.x, p.y, { steps: 10 });
+    };
+    const drop = async () =>
+    {
+        await own.mouse.up();
+        await own.waitForTimeout(100);
+    };
+
+    /* Past the middle of the last tab: after it. */
+    await hold('#panetab-st-a');
+    await toward('#panetab-st-c', 0.8);
+
+    const slot = await own.evaluate(() =>
+    {
+        const hint = document.querySelector('.panedrop');
+        const c = document.getElementById('panetab-st-c')
+                          .getBoundingClientRect();
+        const h = hint.getBoundingClientRect();
+
+        return { shown: !hint.hidden && hint.classList.contains('paneslot'),
+                 at: Math.round(h.left + h.width / 2 - c.right) };
+    });
+
+    await drop();
+
+    const reordered = await strips();
+
+    /* Before the first, from the other leaf. */
+    await hold('#panetab-st-d');
+    await toward('#panetab-st-b', 0.2);
+    await drop();
+
+    const moved = await strips();
+
+    /* And over its own leaf's middle, where it already is: nowhere new,
+       and in front. */
+    const told = await own.evaluate(() => window.stripHeard.length);
+
+    await hold('#panetab-st-c');
+    await toward('.paneleaf:has(#panetab-st-c)', 0.5, 0.6);
+    await drop();
+
+    const stayed = await strips();
+    const raised = await own.evaluate(() =>
+        document.getElementById('panetab-st-c')
+                .getAttribute('aria-selected'));
+
+    /* And again, now that it is in front: nothing at all has changed. */
+    await hold('#panetab-st-c');
+    await toward('.paneleaf:has(#panetab-st-c)', 0.5, 0.6);
+    await drop();
+
+    /* And Escape, half way through: the hint goes, nothing moves, and
+       letting go back over the tab is not a click on it. */
+    const quiet = await own.evaluate(() => window.stripHeard.length);
+
+    await hold('#panetab-st-a');
+    await toward('.paneleaf:has(#panetab-st-c)', 0.05, 0.5);
+    await own.keyboard.press('Escape');
+
+    const hidden = await own.evaluate(() =>
+        document.querySelector('.panedrop').hidden &&
+        !document.querySelector('.panedragging'));
+
+    const back = await centerOf('#panetab-st-a');
+
+    await own.mouse.move(back.x, back.y, { steps: 5 });
+    await drop();
+
+    const escaped = {
+        hidden,
+        layout: await strips(),
+        front: await own.evaluate(() =>
+            document.getElementById('panetab-st-a')
+                    .getAttribute('aria-selected')),
+        heard: await own.evaluate(() => window.stripHeard.length) - quiet,
+    };
+
+    check(heard && slot.shown && Math.abs(slot.at) <= 2,
+          'a tab over a strip is marked with a line between two tabs: ' +
+          `${slot.shown} ${slot.at}`);
+
+    check(reordered === '[["st-b","st-c","st-a"],["st-d"]]',
+          `and let go there it goes there: ${reordered}`);
+
+    check(moved === '[["st-d","st-b","st-c","st-a"]]',
+          `from another leaf too, before the first: ${moved}`);
+
+    check(stayed === moved && raised === 'true',
+          'let go over its own leaf, a tab stays where it was, in front: ' +
+          `${stayed}`);
+
+    check(await own.evaluate(() => window.stripHeard.length) - told === 1,
+          'and it is told of once, for being put in front, and not again ' +
+          'for a drop that changed nothing');
+
+    check(escaped.hidden && escaped.layout === moved &&
+          escaped.front === 'false' && escaped.heard === 0,
+          'Escape takes a drag back: nothing moves, nothing is raised, ' +
+          `and nobody is told: ${JSON.stringify(escaped)}`);
+
+    await own.evaluate(() => window.stripPanes.destroy());
+    await own.close();
+    }
 }
 catch (e)
 {
@@ -1649,3 +1969,4 @@ process.stdout.write(`\n${failures === 0
       'behind a tab\n'
     : `${failures} failed\n`}`);
 process.exitCode = failures;
+
