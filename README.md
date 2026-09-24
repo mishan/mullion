@@ -84,8 +84,9 @@ or write by hand:
 
 A leaf holding more than one pane is tabs. The panes no leaf holds are the
 **drawer**: listed above the layout, one click from coming back. Nothing
-is ever destroyed — closing a pane puts it away, which is why there is
-nowhere in here that makes one.
+a person does destroys a pane — closing one puts it away. Panes come and
+go only when the page says so, with `add` and `remove`, and even then
+the element is the page's: mullion makes none and deletes none.
 
 ## What a person can do
 
@@ -153,9 +154,11 @@ Everything below is a default rather than a rule.
 | `closed` | the drawer's label | `'Closed:'` |
 | `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
 | `version` | which version of your layouts this is; a layout kept under another is not read back | — |
+| `later` | `(id)` — whether a pane not here yet will be added, so a kept layout keeps its place | none will |
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
+`add(id, { near, focus })`, `remove(id)`,
 `layout()`, `setLayout(layout)`, `reset()`, `overlay()`, `tiled()`,
 `setLayouts(layouts, { store, split, version })`, `destroy()`.
 
@@ -214,6 +217,49 @@ there was one, is not read back, and your new default comes up.
 
 ```js
 createPanes({ /* … */ version: 3 });
+```
+
+## Panes the page adds
+
+A page that opens things — files in an editor, a chart per query — has
+panes that are not in its markup when it loads. It puts the element into
+the document itself, where it should sit when the window is narrow, and
+then hands it over:
+
+```js
+const el = document.createElement('section');
+
+el.id = `file-${name}`;
+el.dataset.pane = '';
+el.dataset.paneTitle = name;
+document.getElementById('files').append(el);
+
+panes.add(el.id, { near: 'editor' });
+```
+
+Tiled, it goes where a kept layout had it, beside `near`, or where the
+person last was, in front and with the focus (`focus: false` for a page
+putting back what was open last time). It is always somewhere in the
+layout unless somebody closed it: a layout loaded, reset or swapped in
+that does not have it gets it added the same way.
+
+A kept layout drops the panes the page does not have when it is read,
+which is every added pane. `later` says which ones will come:
+
+```js
+createPanes({ /* … */ later: (id) => id.startsWith('file-') });
+```
+
+and their places are kept, not drawn, until they are added.
+
+`remove(id)` is the reverse: the pane leaves the layout the way a close
+takes it, `onShow` hears it go, and its element is put back where it was
+in the document and returned. What happens to it then is the page's
+business — while tiled, it is back in the body, so a page that is done
+with it removes it in the same breath:
+
+```js
+panes.remove(`file-${name}`)?.remove();
 ```
 
 `destroy()` is the way back out: every pane under its own parent again,

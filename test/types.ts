@@ -43,6 +43,7 @@ const options: PanesOptions = {
     reset: 'Reset layout',
     onLayout: (tree: PaneNode, mode: string) => { void tree; void mode; },
     version: 2,
+    later: (id: string) => id.startsWith('file-'),
 };
 
 /* And a storage that answers later, which is a server. */
@@ -66,6 +67,11 @@ panes.setLayouts({ default: { tabs: ['editor'] } },
                  { store: 'side', split: 18, version: 'b' });
 
 const put: boolean = panes.setLayout(layout);
+const grew: boolean = panes.add('file-1', { near: 'editor', focus: false });
+const gone: HTMLElement | null = panes.remove('file-1');
+
+void grew;
+void gone;
 
 void put;
 panes.destroy();

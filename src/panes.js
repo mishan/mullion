@@ -169,7 +169,8 @@ export function createPanes ({ root, catalog, layouts, mode,
                                strip = 'shrink', lone = true,
                                closed: label = 'Closed:',
                                reset: again = null,
-                               onLayout = () => {}, version })
+                               onLayout = () => {}, version,
+                               later = () => false })
 {
     /* The commands, with a page's own over the defaults rather than
        instead of them: overriding the one chord that clashes should not
@@ -255,18 +256,10 @@ export function createPanes ({ root, catalog, layouts, mode,
        fires for everything that just left the screen. */
     let zoom = null;
 
-    for (const id of catalog)
+    /* A pane taken on: what it is called, how narrow it may be, and
+       where it came from. For the catalog here, and for `add' later. */
+    const enlist = (id, el) =>
     {
-        const el = document.getElementById(id);
-
-        /* A page that does not have this one. A catalog is written
-           against a document, and two pages sharing most of their panes
-           share most of a catalog -- so a name this page has no element
-           for is not an error. It is a pane this page does not have, and
-           it is left out rather than raised. */
-        if (el === null || !el.hasAttribute('data-pane'))
-            continue;
-
         /* A <details>'s summary is its title, already written and already
            right; the attribute is for everything else. */
         const summary = el.tagName === 'DETAILS'
@@ -291,6 +284,11 @@ export function createPanes ({ root, catalog, layouts, mode,
             host: null,             /* the section it is shown in */
             wasOpen: true,          /* the fold it had before adoption */
             fold: null,             /* the listener, so destroy() can go */
+
+            /* Added once the page was up, and the pane named to put it
+               beside when the layout does not say where it goes. */
+            added: false,
+            near: null,
         };
 
         panes.set(id, p);
@@ -303,7 +301,30 @@ export function createPanes ({ root, catalog, layouts, mode,
             p.fold = () => settle();
             el.addEventListener('toggle', p.fold);
         }
+
+        return p;
+    };
+
+    for (const id of catalog)
+    {
+        const el = document.getElementById(id);
+
+        /* A page that does not have this one. A catalog is written
+           against a document, and two pages sharing most of their panes
+           share most of a catalog -- so a name this page has no element
+           for is not an error. It is a pane this page does not have, and
+           it is left out rather than raised. */
+        if (el === null || !el.hasAttribute('data-pane'))
+            continue;
+
+        enlist(id, el);
     }
+
+    /* The panes a person has put away: in the drawer because somebody
+       closed them, rather than because a layout never had them. A pane
+       the page added is always somewhere in the layout unless it is one
+       of these. */
+    const shut = new Set();
 
     /* How far outside the window a pane in the document still counts as
        on the screen: close enough that scrolling to it finds it already
@@ -533,6 +554,11 @@ export function createPanes ({ root, catalog, layouts, mode,
        error and resets nothing. The other way round is the drawer: a pane
        the layout has never seen is simply not in it.
 
+       Unless the page says it will have it later: a pane it adds once it
+       is up -- a file opened again, say -- is not here yet when the
+       layout is read, and `later' is what keeps its place for it. Kept
+       and not drawn, as a pane whose mode is down is.
+
        So is a pane named twice, after the first: it has one element, and
        two leaves claiming it would pull its box back and forth between
        them on every render, each tab controlling a panel the other has. */
@@ -541,7 +567,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (isLeaf(node))
         {
             const tabs = node.tabs.filter((id) =>
-                panes.has(id) && !taken.has(id) && taken.add(id));
+                (panes.has(id) || later(id)) && !taken.has(id) &&
+                taken.add(id));
 
             return tabs.length === 0 ? null
                  : { tabs,
@@ -565,6 +592,12 @@ export function createPanes ({ root, catalog, layouts, mode,
              : kids.length === 1 ? kids[0]
              : { dir: node.dir, size, kids };
     };
+
+    /* Whether a tree names any pane this page has now, whatever mode
+       it is in. */
+    const holdsAny = (node) =>
+        isLeaf(node) ? node.tabs.some((id) => panes.has(id))
+                     : node.kids.some(holdsAny);
 
     const key = () => `${store}:${where}`;
 
@@ -616,6 +649,15 @@ export function createPanes ({ root, catalog, layouts, mode,
     const changed = () =>
     {
         edits++;
+        told();
+    };
+
+    /* Kept and told of, without counting as somebody's change: what the
+       page does to the layout on its own account, such as putting a pane
+       it has just added somewhere. A kept layout on its way from a server
+       is newer than that, and is still put up when it comes. */
+    const told = () =>
+    {
         save();
         onLayout(structuredClone(tree), where);
     };
@@ -631,7 +673,10 @@ export function createPanes ({ root, catalog, layouts, mode,
             const saved = version === undefined ? got
                 : got?.version === version ? got.layout ?? null : null;
 
-            return saved !== null && sane(saved) ? known(saved) : null;
+            const tree = saved !== null && sane(saved) ? known(saved) : null;
+
+            /* One that keeps only panes still to come is no layout yet. */
+            return tree !== null && holdsAny(tree) ? tree : null;
         }
         catch
         {
@@ -678,6 +723,9 @@ export function createPanes ({ root, catalog, layouts, mode,
 
                     tree = kept;
 
+                    if (stray())
+                        told();
+
                     if (tiled)
                         render();
                 }, () => {});
@@ -690,6 +738,9 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
 
         tree = saved ?? fresh();
+
+        if (stray())
+            told();
     };
 
     /* ---- moving a pane about ---- */
@@ -776,6 +827,14 @@ export function createPanes ({ root, catalog, layouts, mode,
             empty(leaf);
     };
 
+    /* Put away by somebody, which is the drawer, and remembered as put
+       away: a pane the page added stays where somebody put it. */
+    const putAway = (id) =>
+    {
+        drawer(id);
+        shut.add(id);
+    };
+
     /* Into a leaf, as the tab in front of it: before the tab named, at
        the end of the strip for null, or -- for nothing said -- at the
        end, unless it is in this leaf already. By name and not by place,
@@ -793,6 +852,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
 
         drawer(id);
+        shut.delete(id);
 
         const at = typeof before === 'string' ? leaf.tabs.indexOf(before) : -1;
 
@@ -1075,7 +1135,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 const was = JSON.stringify(tree);
 
                 if (where.drop === 'drawer')
-                    drawer(id);
+                    putAway(id);
                 else if (where.drop === 'tab')
                     into(id, where.leaf, where.before);
                 else if (where.drop === 'into')
@@ -1373,7 +1433,7 @@ export function createPanes ({ root, catalog, layouts, mode,
      */
     const shutTab = (id, leaf) =>
     {
-        drawer(id);
+        putAway(id);
         focus = leaf;
         changed();
         render();
@@ -1665,6 +1725,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         edits++;
         zoom = null;
         tree = fresh();
+        stray();
         focus = null;
         render();
         onLayout(structuredClone(tree), where);
@@ -1796,6 +1857,40 @@ export function createPanes ({ root, catalog, layouts, mode,
        not. Closing one puts it here and nothing else happens to it. */
     const closed = () => [...panes.keys()].filter(
         (id) => playable(id) && !inLayout.has(id));
+
+    /* Where a pane the page added goes when the layout has no place for
+       it: the leaf of the pane it was added beside, or the one last used,
+       or the first there is. */
+    const target = (p) =>
+    {
+        const beside = p.near === null ? null : leafWith(p.near);
+
+        return beside !== null && playable(p.near) ? beside
+             : focus !== null && holds(focus) ? focus
+             : firstLeaf();
+    };
+
+    /* The panes the page added that a layout just put up does not have,
+     * and that nobody put away, each put where `target' says. Asked
+     * wherever a layout arrives -- read back, reset, swapped in by a
+     * mode, set by the page -- since the page, having opened a pane,
+     * should not find it in the drawer because of which. True if any
+     * was.
+     */
+    const stray = () =>
+    {
+        let any = false;
+
+        for (const p of panes.values())
+            if (p.added && !shut.has(p.id) && playable(p.id) &&
+                leafWith(p.id) === null)
+            {
+                into(p.id, target(p));
+                any = true;
+            }
+
+        return any;
+    };
 
     /* Whether a node is still part of the tree: a split that collapsed
        took its children's addresses with it. */
@@ -2142,7 +2237,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
         else if (keymap.close.includes(e.code))
         {
-            drawer(id);
+            putAway(id);
 
             /* Onto a leaf still in the tree: the one this was, if it
                kept anything, or the first there is. A leaf that closed
@@ -2292,6 +2387,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             zoom = null;
             focus = null;
             tree = made;
+            stray();
             changed();
 
             if (tiled)
@@ -2352,6 +2448,124 @@ export function createPanes ({ root, catalog, layouts, mode,
                 find(`panetab-${id}`)?.focus();
         },
 
+        /* A pane the page did not have when this began: an element it
+         * has put into the document since, marked `data-pane', and taken
+         * on here as a catalog entry would have been.
+         *
+         * In the document first, and by the page: that is where the pane
+         * goes back to when there is no layout, and what `remove' hands
+         * back. Refused -- false -- for an element that is not there, not
+         * marked, or already a pane.
+         *
+         * Tiled, it goes where the layout kept it, if `later' kept a
+         * place for it; beside `near' if that is a pane in the layout; or
+         * where the person last was. In front, and with the focus unless
+         * `focus: false' -- a page putting back the files somebody had
+         * open is not asking to be in every one of them.
+         */
+        add: (id, { near = null, focus: take = true } = {}) =>
+        {
+            const el = document.getElementById(id);
+
+            if (dead || panes.has(id) || el === null || !el.isConnected ||
+                !el.hasAttribute('data-pane'))
+                return false;
+
+            const p = enlist(id, el);
+
+            p.added = true;
+            p.near = near;
+
+            if (watching)
+                sight.observe(el);
+
+            /* No layout yet, which is where it gets a place when there is
+               one; or a pane whose mode is not up, which has no place to
+               be put in until it is. */
+            if (tree === null || !playable(id))
+            {
+                if (tiled)
+                    render();
+                else
+                    settle();
+
+                return true;
+            }
+
+            const leaf = leafWith(id) ?? target(p);
+
+            if (leafWith(id) === null)
+                into(id, leaf);
+            else
+                leaf.active = liveTabs(leaf).indexOf(id);
+
+            /* Told of, and not counted as somebody's change: a page
+               putting back the files that were open when it last closed
+               does it before a kept layout on its way has arrived, and
+               that layout is still the one to put up. */
+            told();
+
+            if (!tiled)
+            {
+                settle();
+                return true;
+            }
+
+            focus = leaf;
+            unzoomFor(leaf);
+            render();
+
+            if (take)
+                find(`panetab-${id}`)?.focus();
+
+            return true;
+        },
+
+        /* And the other way: a pane no longer one, and its element handed
+         * back where it was in the document -- the page's to keep or to
+         * delete, since a module that creates no content has no business
+         * deleting any. Returned, or null for a pane there is not.
+         *
+         * Out of the layout the way a close takes it, split and all, but
+         * not into the drawer: the drawer is for what can come back.
+         * onShow hears it leave the screen one last time.
+         */
+        remove: (id) =>
+        {
+            const p = panes.get(id);
+
+            if (dead || p === undefined)
+                return null;
+
+            const held = tree !== null && leafWith(id) !== null;
+
+            if (held)
+                drawer(id);
+
+            home.delete(id);
+            shut.delete(id);
+            inView.delete(id);
+            sight?.unobserve(p.el);
+
+            if (p.fold !== null)
+                p.el.removeEventListener('toggle', p.fold);
+
+            if (shown.get(id) === true)
+                onShow(id, false);
+
+            shown.delete(id);
+            restore(p);
+            panes.delete(id);
+
+            if (held)
+                changed();
+
+            if (tiled)
+                render();
+
+            return p.el;
+        },
+
         /* And put away, which is the drawer and not the bin. There is
            no drawer without a layout, for the same reason. */
         close: (id) =>
@@ -2359,7 +2573,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (!tiled || !panes.has(id))
                 return;
 
-            drawer(id);
+            putAway(id);
             changed();
             render();
         },

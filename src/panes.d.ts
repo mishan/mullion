@@ -98,13 +98,18 @@ export interface PanesOptions {
   /** Somebody changed the layout -- a drag, a divider, a chord, a close,
    *  a reset, or a call on the handle -- with a copy of it and the mode it
    *  is for. Not called for a layout loaded, or swapped in by a mode or
-   *  `setLayouts`. */
+   *  `setLayouts` -- except where a pane the page added was put into it,
+   *  since that layout is then not the one that was kept. */
   onLayout?: (layout: PaneNode, mode: string) => void;
   /** Which version of the page's layouts this is. A layout kept under
    *  another version -- or under none, before a page first gave one -- is
    *  not read back, and the default comes up instead: the way to make a
    *  changed default reach people who have been here before. */
   version?: string | number;
+  /** Whether a pane this page does not have yet will be added later, with
+   *  `add`: its place in a kept layout is kept for it rather than dropped,
+   *  and not drawn until it is added. */
+  later?: (id: string) => boolean;
 }
 
 export interface PaneKeys {
@@ -149,6 +154,16 @@ export interface Panes {
   present(id: string, opts?: { focus?: boolean }): void;
   /** Put a pane in the drawer. */
   close(id: string): void;
+  /** Take on a pane the page has put into the document since: an element
+   *  with this id, marked `data-pane`. Tiled, it goes where a kept layout
+   *  had it, beside `near`, or where the person last was, in front and
+   *  with the focus unless `focus: false`. False for an element that is
+   *  not in the document, not marked, or already a pane. */
+  add(id: string, opts?: { near?: string; focus?: boolean }): boolean;
+  /** No longer a pane: out of the layout, told it has left the screen,
+   *  and its element put back where it was in the document and returned,
+   *  for the page to keep or delete. Null for a pane there is not. */
+  remove(id: string): HTMLElement | null;
   /** What its tab says. */
   setTitle(id: string, text: string): void;
   /** Whether a layout is up at all. */
