@@ -2383,6 +2383,35 @@ try
 
         const cameBack = leaves();
 
+        /* In front and the last tab of its leaf -- a pane on the screen,
+           under React's StrictMode -- and in front again when it is back,
+           though its leaf's front had to move off it while it was gone. */
+        const frontOf = () =>
+        {
+            const tree = panes.layout();
+
+            return (tree.kids?.[0] ?? tree).active;
+        };
+
+        panes.present('ad-f1');
+        panes.remove('ad-f1');
+
+        const frontGone = frontOf();
+
+        panes.add('ad-f1', { focus: false });
+
+        const frontBack = frontOf();
+
+        /* Unless somebody changed the layout meanwhile, which makes what
+           is in front theirs to have said. */
+        panes.remove('ad-f1');
+        panes.close('ad-b');
+        panes.add('ad-f1', { focus: false });
+
+        const frontKept = frontOf();
+
+        panes.present('ad-b');
+
         /* And taken away when it will not: the element back where it
            was, told it has left the screen, the layout without it. */
         window.adLater = () => false;
@@ -2414,7 +2443,8 @@ try
         home.remove();
         void stray;
 
-        return { placeKept, cameBack, refused, added, beside, focused, shownNow,
+        return { placeKept, cameBack, frontGone, frontBack, frontKept,
+                 refused, added, beside, focused, shownNow,
                  heardAdd,
                  waiting, back, kept3, early, late, afterReset, inDrawer,
                  handed, readded, whole };
@@ -2463,6 +2493,15 @@ try
           'place, not drawn, and comes back to it behind what was in ' +
           `front: ${grown.placeKept.layout} ` +
           JSON.stringify(grown.cameBack));
+
+    check(grown.frontGone === 0 && grown.frontBack === 1,
+          'and one removed from in front, as the last tab of its leaf, is ' +
+          `in front again when it is back: ${grown.frontGone} then ` +
+          `${grown.frontBack}`);
+
+    check(grown.frontKept === 0,
+          'unless the layout was changed while it was gone: ' +
+          grown.frontKept);
 
     check(grown.readded && grown.whole,
           'and the same id can be added again, and destroy() hands back ' +

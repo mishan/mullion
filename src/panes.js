@@ -773,8 +773,17 @@ export function createPanes ({ root, catalog, layouts, mode,
         edits++;
         waiting = 0;
         owed = false;
+        wasFront.clear();
         told();
     };
+
+    /* Panes removed from in front of their leaf that `later' says will
+       come back: in front again when they do. Their index cannot say so
+       while they are gone -- a render keeps a leaf's front tab among the
+       tabs it has, and one that was last is moved off it. Forgotten once
+       somebody changes the layout, since then what is in front is theirs
+       to have said. */
+    const wasFront = new Set();
 
     /* What the page asked for while a kept layout was on its way, done
        again over it once it comes: a pane raised at somebody. */
@@ -2915,7 +2924,10 @@ export function createPanes ({ root, catalog, layouts, mode,
                in front of it, as it was left. */
             const dormant = tree === null ? null : leafWith(id);
             const front = dormant === null ? undefined
+                        : wasFront.has(id) ? id
                         : liveTabs(dormant)[dormant.active ?? 0];
+
+            wasFront.delete(id);
 
             const p = enlist(id, el);
 
@@ -3027,6 +3039,11 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             if (coming && front !== undefined && front !== id)
                 leaf.active = liveTabs(leaf).indexOf(front);
+
+            if (coming && front === id)
+                wasFront.add(id);
+            else
+                wasFront.delete(id);
 
             /* The page's doing, as `add' is. */
             if (held)

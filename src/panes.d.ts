@@ -204,7 +204,8 @@ export interface Panes {
   /** No longer a pane: out of the layout, told it has left the screen,
    *  and its element put back where it was in the document and returned,
    *  for the page to keep or delete. A pane `later` says will come back
-   *  keeps its place, not drawn, until it is added again. Null for a pane
+   *  keeps its place, not drawn, until it is added again -- in front
+   *  again if it was, unless the layout is changed meanwhile. Null for a pane
    *  there is not. */
   remove(id: string): HTMLElement | null;
   /** What its tab says. */
