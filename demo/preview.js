@@ -22,12 +22,19 @@
  * The frame is `sandbox="allow-scripts"' and nothing more, so what runs
  * in it has an origin of its own and cannot reach this page; the two talk
  * by postMessage alone, and a message is taken only from this frame.
+ *
+ * The program is not inline. It is a `blob:' script made inside the
+ * frame, which is of the frame's own origin: WebKit counts an inline
+ * script in a sandboxed `srcdoc' as foreign to its own document and
+ * reports its errors as "Script error." and nothing else. As a file of
+ * its own it is reported in full, and its line numbers are app.js's.
  */
 
-/* Runs in the frame, before the program. `SHOWN' is written in as the
+/* Runs in the frame, before the program. `shown' is written in as the
    page is built, so a program started behind a tab does not draw one
-   frame before it is told. */
-const SHIM = (shown) => `
+   frame before it is told; the program is written in as a string, with
+   every `<' escaped so that nothing in it can close this script. */
+const SHIM = (shown, js) => `
 (() => {
   const post = (m) => parent.postMessage({ playground: 1, ...m }, '*');
   const text = (v) => {
@@ -35,6 +42,10 @@ const SHIM = (shown) => `
     if (v instanceof Error) return String(v);
     try { return JSON.stringify(v) ?? String(v); } catch { return String(v); }
   };
+
+  const program = URL.createObjectURL(new Blob(
+    [${JSON.stringify(js).replace(/</g, '\\u003c')}],
+    { type: 'text/javascript' }));
 
   for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
     const was = console[level].bind(console);
@@ -45,7 +56,8 @@ const SHIM = (shown) => `
   }
 
   addEventListener('error', (e) =>
-    post({ kind: 'log', level: 'error', text: e.message, line: e.lineno }));
+    post({ kind: 'log', level: 'error', text: e.message,
+           line: e.filename === program ? e.lineno : undefined }));
   addEventListener('unhandledrejection', (e) =>
     post({ kind: 'log', level: 'error',
            text: 'Unhandled rejection: ' + text(e.reason) }));
@@ -82,27 +94,31 @@ const SHIM = (shown) => `
   });
 
   setInterval(() => { post({ kind: 'fps', fps: frames }); frames = 0; }, 1000);
+
+  /* For the end of the body, where the program runs. */
+  document.currentScript.dataset.program = program;
 })();
 `;
 
-/* A closing tag inside the program would close the element it is in. */
-const guard = (src, tag) => src.replace(new RegExp(`</(${tag})`, 'gi'), '<\\/$1');
+/* At the end of the body: the program, written rather than appended so
+   that it runs where it stands -- after the markup, and before the
+   document is done, as an inline script there would. */
+const RUN = `document.write('<script src="' +
+  document.querySelector('script[data-program]').dataset.program +
+  '"><' + '/script>');`;
 
-/* The page, and the line the program's first line lands on -- an error
-   in it is reported against the whole document, and the Console says
-   where in app.js it was. */
+/* A closing tag inside the stylesheet would close the element it is in. */
+const guard = (src) => src.replace(/<\/(style)/gi, '<\\/$1');
+
+/* The page, as `srcdoc'. */
 export function build ({ html, css, js }, shown)
 {
-    const head = '<!doctype html>\n<html lang="en">\n<head>\n' +
-                 '<meta charset="utf-8">\n' +
-                 `<style>\n${guard(css, 'style')}\n</style>\n` +
-                 `<script>${SHIM(shown)}</script>\n` +
-                 `</head>\n<body>\n${html}\n<script>\n`;
-
-    return {
-        doc: `${head}${guard(js, 'script')}\n</script>\n</body>\n</html>\n`,
-        first: head.split('\n').length,
-    };
+    return '<!doctype html>\n<html lang="en">\n<head>\n' +
+           '<meta charset="utf-8">\n' +
+           `<style>\n${guard(css)}\n</style>\n` +
+           `<script>${SHIM(shown, js)}</script>\n` +
+           `</head>\n<body>\n${html}\n<script>${RUN}</script>\n` +
+           '</body>\n</html>\n';
 }
 
 /* Tell the frame whether it is on the screen. */

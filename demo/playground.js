@@ -151,17 +151,13 @@ $('onscreen').append(...CATALOG.map((id) =>
 /* ---- the preview ---- */
 
 const frame = $('frame');
-let first = 1;          /* the document line app.js starts on */
 let stale = true;       /* edited since it last ran */
 let fps = 0;
 
 const run = () =>
 {
-    const page = build(source(), onScreen.get('preview'));
-
-    first = page.first;
     stale = false;
-    frame.srcdoc = page.doc;
+    frame.srcdoc = build(source(), onScreen.get('preview'));
 };
 
 /* An edit runs the program again after a pause in the typing -- but only
@@ -271,12 +267,12 @@ const say = (level, text, line) =>
         body.textContent = text;
         li.append(time, body);
 
-        if (line !== undefined && line >= first)
+        if (line !== undefined)
         {
             const where = document.createElement('span');
 
             where.className = 'where';
-            where.textContent = `app.js:${line - first + 1}`;
+            where.textContent = `app.js:${line}`;
             li.append(where);
         }
 
