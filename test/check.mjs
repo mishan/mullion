@@ -2691,6 +2691,83 @@ try
 
     await own.close();
     }
+
+    /* ---- a renderer that falls over ----
+     *
+     * Chromium's renderer has crashed outright -- the whole tab gone --
+     * on a `moveBefore' into a leaf one of whose panes was hidden, or
+     * shown, a moment before or after. Until the browser is fixed, and
+     * the fix is what people have, mullion has to not do that. Each
+     * case on a page of its own, since a crash takes the page with it.
+     */
+    {
+    const survives = async (steps) =>
+    {
+        const own = await browser.newPage({ viewport: WIDE });
+        let crashed = false;
+
+        own.on('crash', () => { crashed = true; });
+        own.on('pageerror', (e) => errors.push(e.message));
+        await own.goto(base);
+        await own.waitForFunction(() => window.tiler !== undefined);
+
+        try
+        {
+            await steps(own);
+            await own.waitForTimeout(150);
+            await own.evaluate(() => document.body.offsetWidth);
+        }
+        catch
+        {
+            crashed = true;
+        }
+
+        await own.close().catch(() => {});
+
+        return !crashed;
+    };
+
+    /* A tab let go before the tab in front of another leaf's strip. */
+    const before = (from, onto) => async (own) =>
+    {
+        const a = await own.locator(from).boundingBox();
+
+        await own.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+        await own.mouse.down();
+        await own.mouse.move(a.x + a.width / 2 + 20, a.y + a.height / 2,
+                             { steps: 3 });
+
+        const t = await own.locator(onto).boundingBox();
+
+        await own.mouse.move(t.x + 3, t.y + t.height / 2, { steps: 8 });
+        await own.mouse.up();
+    };
+
+    check(await survives(before('#panetab-fx-doc', '#panetab-fx-paint')),
+          'a tab dropped before the front tab of another strip does not ' +
+          'take the renderer down');
+
+    check(await survives(before('#panetab-fx-list', '#panetab-fx-wide')),
+          'nor another pair of them');
+
+    /* A pane whose mode goes down and comes back up, in a leaf it
+       shares. */
+    check(await survives(async (own) =>
+    {
+        await own.evaluate(async () =>
+        {
+            const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+            const t = window.tiler;
+
+            t.pane('setLayout', { tabs: ['fx-only-one', 'fx-paint'],
+                                  active: 0 });
+            t.pane('available', 'fx-only-one', false);
+            await wait(50);
+            t.pane('available', 'fx-only-one', true);
+            await wait(50);
+        });
+    }), 'nor a pane in a shared leaf made unavailable and available again');
+    }
 }
 catch (e)
 {

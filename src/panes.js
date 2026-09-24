@@ -367,8 +367,12 @@ export function createPanes ({ root, catalog, layouts, mode,
     const sight = typeof IntersectionObserver === 'function'
         ? new IntersectionObserver((changes) =>
           {
+              /* Only for a pane there still is: an answer already on its
+                 way when one is removed would otherwise be the first
+                 thing an id added again is told. */
               for (const e of changes)
-                  inView.set(e.target.id, e.isIntersecting);
+                  if (panes.get(e.target.id)?.el === e.target)
+                      inView.set(e.target.id, e.isIntersecting);
 
               settle();
           }, { rootMargin: `${NEAR}px` })
@@ -906,10 +910,14 @@ export function createPanes ({ root, catalog, layouts, mode,
        after it. */
     const into = (id, leaf, before) =>
     {
-        /* Into the leaf it is already in, and nowhere in particular: in
+        /* Into the leaf it is already in, and nowhere in particular -- or
+           onto a strip with nothing else in it to go before or after: in
            front, where it was. Moving it to the end of the strip was
-           never what that asked. */
-        if (leafWith(id) === leaf && before === undefined)
+           never what that asked, and taking it out first empties a leaf
+           of one, which takes the leaf out of the tree it is going
+           back into. */
+        if (leafWith(id) === leaf &&
+            (before === undefined || liveTabs(leaf).length === 1))
         {
             leaf.active = liveTabs(leaf).indexOf(id);
             return;
@@ -936,10 +944,17 @@ export function createPanes ({ root, catalog, layouts, mode,
     {
         const from = leafWith(id);
 
-        if (from === leaf && leaf.tabs.length === 1)
+        /* Counted over the tabs in play: a leaf whose only other tabs are
+           off with their mode, or places kept for panes still to come,
+           has nothing on the screen to split from. */
+        if (from === leaf && liveTabs(leaf).length === 1)
             return;
 
         drawer(id);
+
+        /* Out of the drawer by a split is out of it as much as by a
+           click: no longer somebody's to have put away. */
+        dismissed.delete(id);
 
         const made = { tabs: [id], active: 0 };
         const pair = { dir, size: [0.5, 0.5],
@@ -1410,17 +1425,20 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (parent.moveBefore !== undefined && parent.isConnected &&
             child.isConnected)
         {
-            /* Style brought up to date first. Chromium's renderer has
-               crashed outright on a move into a box one of whose
-               children had just been taken out of the flow -- a pane
-               behind a tab, hidden a line earlier, is exactly that --
-               and a read of any computed style is enough to prevent
-               it. */
+            /* Style brought up to date on both sides of the move.
+               Chromium's renderer has crashed outright -- the page gone
+               -- on a move into a box one of whose children had just
+               been hidden or shown, before the move or after it: a pane
+               behind a tab is exactly that. A read of any computed style
+               either side is enough to prevent it, and `fillLeaf' also
+               settles which panes are hidden before it moves any. Both
+               stay until the browser's fix is what people have. */
             void getComputedStyle(parent).display;
 
             try
             {
                 parent.moveBefore(child, before);
+                void getComputedStyle(parent).display;
                 return;
             }
             catch
@@ -1481,6 +1499,16 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         leaf.active = Math.min(Math.max(leaf.active ?? 0, 0), ids.length - 1);
 
+        /* Which host is shown, settled for all of them before any is
+           moved. A host hidden after another has been moved in beside it
+           is what has taken Chromium's renderer down (see `move'), and
+           there is no order of moves that makes that safe -- only not
+           doing it. */
+        ids.forEach((id, i) =>
+        {
+            adopt(panes.get(id)).hidden = i !== leaf.active;
+        });
+
         ids.forEach((id, i) =>
         {
             const p = panes.get(id);
@@ -1524,7 +1552,6 @@ export function createPanes ({ root, catalog, layouts, mode,
             shut.tabIndex = front ? 0 : -1;
             shut.addEventListener('click', () => shutTab(id, leaf));
 
-            host.hidden = !front;
             host.setAttribute('aria-labelledby', tab.id);
 
             /* In front of somebody, which a zoom is entitled to answer
@@ -1600,9 +1627,12 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
             return;
 
-        /* The arrow pointing the way the strip reads is the next tab. */
-        const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key] *
-                     (backward(e.currentTarget) ? -1 : 1);
+        /* The arrow pointing the way the strip reads is the next tab.
+           Any other key is not this strip's: Enter and Space are the
+           button's, Tab is the page's. */
+        const arrow = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+        const step = arrow === undefined ? undefined
+                   : arrow * (backward(e.currentTarget) ? -1 : 1);
         const to = e.key === 'Home' ? 0
                  : e.key === 'End' ? ids.length - 1
                  : step === undefined ? -1
@@ -2430,7 +2460,22 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (dead || p === undefined || off(p.el) === !ok)
                 return;
 
+            /* What is in front of its leaf stays in front: `active' is a
+               place among the tabs in play, and this one coming or going
+               moves every place after it. */
+            const leaf = tree === null ? null : leafWith(id);
+            const front = leaf === null ? undefined
+                        : liveTabs(leaf)[leaf.active ?? 0];
+
             p.el.toggleAttribute(OFF, !ok);
+
+            if (front !== undefined && front !== id)
+                leaf.active = liveTabs(leaf).indexOf(front);
+
+            /* A pane the page added while its mode was down had nowhere
+               to go then, and has now. */
+            if (ok && tree !== null && stray())
+                told();
 
             if (tiled)
                 render();
@@ -2716,6 +2761,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 drawer(id);
 
             home.delete(id);
+            spot.delete(id);
             dismissed.delete(id);
             inView.delete(id);
             sight?.unobserve(p.el);
