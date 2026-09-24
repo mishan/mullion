@@ -52,7 +52,10 @@ export interface PanesOptions {
    *  textarea, input, select and contenteditable. */
   editing?: string;
   /** A pane came into view, or left it. The whole of what tiling asks of
-   *  a page: work behind a background tab can stop. */
+   *  a page: work behind a background tab can stop. Out of view is behind
+   *  another tab, in the drawer, behind a zoomed pane, folded, off with
+   *  its mode, scrolled more than 100px out of the window when not tiled,
+   *  or in a browser tab or window nobody is looking at. */
   onShow?: (id: string, on: boolean) => void;
   /** Whether to tile when the screen allows it, absent `?panes=`. */
   on?: boolean;
@@ -72,11 +75,14 @@ export interface PanesOptions {
   /** Where a layout is kept between visits. Any of the three may answer
    *  with a promise, for a layout kept on a server: the page opens on the
    *  default, and what was kept replaces it when it arrives, unless the
-   *  mode has changed or somebody has moved something by then. */
+   *  mode has changed or somebody has moved something by then. Nothing is
+   *  written over it while it is on its way, and writes are made one at
+   *  a time, in order. What `setItem` and `removeItem` answer is waited
+   *  for and otherwise ignored, so a `fetch` will do. */
   storage?: {
-    getItem(key: string): string | null | Promise<string | null>;
-    setItem(key: string, value: string): void | Promise<void>;
-    removeItem(key: string): void | Promise<void>;
+    getItem(key: string): string | null | PromiseLike<string | null>;
+    setItem(key: string, value: string): unknown;
+    removeItem(key: string): unknown;
   };
   /** The commands, merged over the defaults. */
   keys?: Partial<PaneKeys>;
@@ -90,16 +96,17 @@ export interface PanesOptions {
   lone?: boolean | string[];
   /** What the drawer of closed panes is labelled. */
   closed?: string;
-  /** A button that puts the mode's default layout back, labelled with
-   *  this (its accessible name is "Reset layout"): at the end of the
-   *  first tab strip, or in the drawer's row when every leaf is bare.
-   *  None when null. */
+  /** A button that puts the mode's default layout back, labeled with
+   *  this: at the end of the first tab strip, or in the drawer's row when
+   *  every leaf is bare. Its accessible name is this where it has words
+   *  in it, and "Reset layout" where it is a glyph. None when null. */
   reset?: string | null;
-  /** Somebody changed the layout -- a drag, a divider, a chord, a close,
-   *  a reset, or a call on the handle -- with a copy of it and the mode it
-   *  is for. Not called for a layout loaded, or swapped in by a mode or
-   *  `setLayouts` -- except where a pane the page added was put into it,
-   *  since that layout is then not the one that was kept. */
+  /** The layout changed -- a drag, a divider, a chord, a close, a reset,
+   *  or a call on the handle -- with a copy of it and the mode it is for.
+   *  Not for a change that changed nothing. Not for a layout loaded, or
+   *  swapped in by a mode or `setLayouts`, except where a pane the page
+   *  added was put into it, or where a kept layout arrived after the page
+   *  had been told of the one it replaces. */
   onLayout?: (layout: PaneNode, mode: string) => void;
   /** Which version of the page's layouts this is. A layout kept under
    *  another version -- or under none, before a page first gave one -- is
@@ -115,7 +122,7 @@ export interface PanesOptions {
    *  the page ends it with `remove`, now or after asking, or keeps it by
    *  doing nothing. Without this, an ephemeral pane cannot be closed from
    *  the layout at all. */
-  onDiscard?: (id: string) => void;
+  onDiscard?: ((id: string) => unknown) | null;
 }
 
 /** One pane, as `panes()` reports it. */
@@ -161,7 +168,8 @@ export interface Panes {
   layout(): PaneNode | null;
   /** Put up a layout for the mode that is up, keep it, and tell
    *  `onLayout`. Panes the page does not have are dropped; a tree that is
-   *  not the shape of a layout is refused, and this returns false. */
+   *  not the shape of a layout, or names no pane the page has, is
+   *  refused, and this returns false. */
   setLayout(layout: PaneNode): boolean;
   /** Back to the mode's default layout, forgetting the one kept for it:
    *  what Alt 0 does. */
@@ -169,17 +177,21 @@ export interface Panes {
   /** Raise a pane: in front of its leaf, and out of the drawer if that is
    *  where it was -- back into the leaf it left, or beside the neighbor
    *  it had if its leaf closed with it. `focus: false` for a pane the page
-   *  is raising at somebody rather than for them, which is never put in
-   *  front of the leaf that has the focus. */
+   *  is raising at somebody rather than for them: out of the drawer, it
+   *  goes into another leaf than the one with the focus, where there is
+   *  another. Nothing without a layout. */
   present(id: string, opts?: { focus?: boolean }): void;
   /** Put a pane in the drawer -- or, for an ephemeral one, ask the page
-   *  through `onDiscard`, as a person's close would. */
+   *  through `onDiscard`, as a person's close would. Nothing without a
+   *  layout. */
   close(id: string): void;
   /** Take on a pane the page has put into the document since: an element
    *  with this id, marked `data-pane`. Tiled, it goes where a kept layout
-   *  had it, beside `near`, or where the person last was, in front and
-   *  with the focus unless `focus: false`. Ephemeral -- a person's close
-   *  asks `onDiscard` instead of using the drawer -- unless `keep: true`.
+   *  had it, as a tab in `near`'s leaf, or where the person last was, in
+   *  front and with the focus -- unless `focus: false`, when a pane going
+   *  back into a place kept for it goes back behind what was in front.
+   *  Ephemeral -- a person's close asks `onDiscard` instead of using the
+   *  drawer -- unless `keep: true`.
    *  False for an element that is not in the document, not marked, or
    *  already a pane. */
   add(id: string,
@@ -195,9 +207,10 @@ export interface Panes {
   setTitle(id: string, text: string): void;
   /** Whether a layout is up at all. */
   tiled(): boolean;
-  /** Another set of layouts, in place: the layout that is up is saved
-   *  under its store, and the mode's layout from the new set replaces it.
-   *  Optionally a new store prefix, divider thickness and version. */
+  /** Another set of layouts, in place: the layout that is up stays kept
+   *  under its store, as every change to it was kept when it was made,
+   *  and the mode's layout from the new set replaces it. Optionally a new
+   *  store prefix, divider thickness and version. */
   setLayouts(layouts: Record<string, PaneNode>,
              opts?: { store?: string; split?: number;
                       version?: string | number }): void;

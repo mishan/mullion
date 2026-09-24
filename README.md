@@ -46,7 +46,10 @@ markup, one stylesheet and one set of tests.
 
 **A pane nobody is looking at is told so.** `onShow` is the contract, and
 it is the reason tiling can pay for itself rather than cost: two canvases
-stacked as tabs draw one picture, not two.
+stacked as tabs draw one picture, not two. A pane is out of sight behind
+another tab, in the drawer, behind a zoomed pane, folded, off with its
+mode, scrolled more than 100px out of the window when the page is not
+tiled, or in a browser tab or window nobody is looking at.
 
 ```js
 import { createPanes } from 'mullion';
@@ -84,9 +87,11 @@ or write by hand:
 
 A leaf holding more than one pane is tabs. The panes no leaf holds are the
 **drawer**: listed above the layout, one click from coming back. Nothing
-a person does destroys a pane — closing one puts it away. Panes come and
-go only when the page says so, with `add` and `remove`, and even then
-the element is the page's: mullion makes none and deletes none.
+a person does destroys a pane: closing one puts it away, or, for a pane
+the page added as ephemeral, asks the page (see
+[How a pane ends](#how-a-pane-ends)). Panes come and go only when the
+page says so, with `add` and `remove`, and even then the element is the
+page's: mullion makes none and deletes none.
 
 Brought back, from the drawer or by `present()`, a pane goes where it
 was: into the stack it left, or — if it was the last pane in its leaf
@@ -99,13 +104,15 @@ the pane last focused.
 | | what it does |
 |---|---|
 | drag a tab | onto a tab strip to put it there, onto a pane to stack, onto an edge to split, onto the drawer to close; `Esc` to take it back |
-| the cross on a tab | close it to the drawer |
+| drag a closed pane | out of the drawer, the same way |
+| the cross on a tab | close it: to the drawer, or for an ephemeral pane, ask the page |
+| `←` `→` `Home` `End` on a tab | the tab that way along its strip, or the first or last |
 | a divider | drag, or focus it and use the arrows; double-click to even up |
 | `Alt` + arrow | move the focus to the pane that way |
 | `Alt Shift` + arrow | move the *pane* that way |
-| `Alt \` / `Alt -` | split right / split down |
-| `Alt Enter` | zoom one pane to fill the layout |
-| `Alt W` | close the pane in front |
+| `Alt \` / `Alt -` | split the pane in front off right / down; in a leaf of one, open the first closed pane there |
+| `Alt Enter` | zoom the pane in front to fill the layout, or back |
+| `Alt W` | close the pane in front, as its cross does |
 | `Alt 0` | forget the saved layout and start over (or the `reset` button, or `reset()`) |
 
 In a page that reads right to left, every direction is the one on the
@@ -116,8 +123,9 @@ edge goes on the left.
 Every command is a chord with `Alt` in it, because wherever the bare
 letters already mean something — a text editor, a chat composer, a
 keyboard instrument — a tiler that took `W` for itself would have taken
-it. All of them are inert while the focus is in a text box, and all of
-them are an argument (`keys`) for a page where that is still wrong.
+it. All of them are inert while the focus is in a text box, and the
+modifier and the letters are an argument (`keys`) for a page where that
+is still wrong; the arrows are the arrows.
 
 ## Markup
 
@@ -144,7 +152,7 @@ Everything below is a default rather than a rule.
 | `mode` | which named layout to open on | — |
 | `layouts` | one default tree per mode | every pane in one leaf |
 | `onShow` | `(id, on)` — a pane came into view, or left it | — |
-| `onLayout` | `(layout, mode)` — somebody changed the layout | — |
+| `onLayout` | `(layout, mode)` — the layout changed, by a person or through the handle | — |
 | `on` | tile when the screen allows it | `false` |
 | `store` | localStorage key prefix; the mode is appended | `'panes'` |
 | `editing` | extra selector for "a key here is text" | — |
@@ -169,9 +177,14 @@ And the handle it returns: `available(id, on)`, `mode(name)`,
 `layout()`, `setLayout(layout)`, `reset()`, `overlay()`, `tiled()`,
 `setLayouts(layouts, { store, split, version })`, `destroy()`.
 
+`present`, `close` and `setTitle` are about the layout, and with the tiler
+off — a narrow window — `present` and `close` do nothing: the page is the
+document, and every pane is already on it.
+
 `setLayouts` swaps in another set of layouts without taking the tiler
-down: the layout that is up is saved under its store, and the mode's
-layout from the new set replaces it. It is for a page with more than one
+down: the layout that is up stays kept under its store, as every change
+to it was kept when it was made, and the mode's layout from the new set
+replaces it. It is for a page with more than one
 shape, such as a phone that has one layout upright and another on its
 side:
 
@@ -192,10 +205,21 @@ close by.
 
 A layout is kept in `localStorage` under the store and the mode. A page
 with accounts keeps it on a server instead: `storage` takes the same three
-methods, and any of them may return a promise. The page opens on its
-default and the kept layout replaces it when it arrives, unless somebody
-has moved something first. `onLayout` is told of every change a person
-makes, with a copy of the tree, which is also what an undo button needs:
+methods, and any of them may return a promise.
+
+- The page opens on its default, and the kept layout replaces it when it
+  arrives, unless somebody has moved something first.
+- Nothing is written over it while it is on its way. What the page does
+  in the meantime (panes it adds or raises) is done again over it when
+  it comes.
+- Writes go one at a time, in the order they were made, and a read waits
+  for the writes before it, so a slow request never puts an old layout
+  back over a new one.
+
+`onLayout` is told of every change, by a person or through the handle,
+with a copy of the tree, which is also what an undo button needs. A
+change that changes nothing (a pane raised that was already in front) is
+not one:
 
 ```js
 createPanes({
@@ -213,8 +237,8 @@ createPanes({
 that is up — a preset, one read out of a link, a step back through that
 undo — and keeps it and tells `onLayout` like any other change. It is read
 the way a kept layout is read: a pane the page does not have is dropped,
-and a tree that is not the shape of a layout is refused and `false` is
-returned.
+and a tree that is not the shape of a layout, or that names no pane the
+page has, is refused and `false` is returned.
 
 A kept layout outlives the default it was made from, so when you move a
 pane in your defaults, or add one, somebody who has been here before goes
@@ -244,9 +268,11 @@ document.getElementById('files').append(el);
 panes.add(el.id, { near: 'editor' });
 ```
 
-Tiled, it goes where a kept layout had it, beside `near`, or where the
-person last was, in front and with the focus (`focus: false` for a page
-putting back what was open last time).
+Tiled, it goes where a kept layout had it, as a tab in `near`'s leaf, or
+where the person last was, in front and with the focus. With
+`focus: false`, for a page putting back what was open last time, a pane
+going back into a place kept for it goes back behind whatever was in
+front there.
 
 ### How a pane ends
 
@@ -262,7 +288,7 @@ There are two kinds:
 | it ends | when the page calls `remove(id)` | when the page calls `remove(id)` |
 
 A person's close of an ephemeral pane — its cross, `Alt W`, a drop on
-the drawer, or `close(id)` from the page — moves nothing. It calls
+the drawer, or `close(id)` from the page while tiled — moves nothing. It calls
 `onDiscard`, and the page ends the pane with `remove`, now or after
 asking about unsaved changes, or keeps it by doing nothing:
 

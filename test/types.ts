@@ -18,7 +18,8 @@
  */
 
 import { createPanes } from 'mullion';
-import type { PaneNode, Panes, PanesOptions, PaneState } from 'mullion';
+import type { PaneKeys, PaneLeaf, PaneNode, Panes, PanesOptions,
+              PaneSplit, PaneState } from 'mullion';
 import { placePopover } from 'mullion/popover.js';
 
 const layout: PaneNode = {
@@ -47,14 +48,34 @@ const options: PanesOptions = {
     onDiscard: (id: string) => { void id; },
 };
 
-/* And a storage that answers later, which is a server. */
+/* And a storage that answers later, which is a server -- written as the
+   README writes it, since that is what somebody will copy. */
 const remote: PanesOptions['storage'] = {
-    getItem: async (k: string) => (k === '' ? null : '{"tabs":[]}'),
-    setItem: async (k: string, v: string) => { void k; void v; },
-    removeItem: (k: string) => { void k; },
+    getItem: (k: string) => fetch(`/prefs/${k}`)
+        .then((r) => (r.ok ? r.text() : null)),
+    setItem: (k: string, v: string) =>
+        fetch(`/prefs/${k}`, { method: 'PUT', body: v }),
+    removeItem: (k: string) => fetch(`/prefs/${k}`, { method: 'DELETE' }),
 };
 
-void remote;
+/* The other forms each option takes. */
+const bare: PanesOptions = {
+    root: document.body,
+    catalog: ['editor'],
+    mode: 'default',
+    storage: remote,
+    lone: false,
+    reset: null,
+    onDiscard: async (id: string) => { await Promise.resolve(id); },
+};
+
+const leaf: PaneLeaf = { tabs: ['editor'] };
+const split: PaneSplit = { dir: 'col', size: [1, 1], kids: [leaf, leaf] };
+const chord: PaneKeys['chord'] = (e: KeyboardEvent) => e.altKey;
+
+void bare;
+void split;
+void chord;
 
 const panes: Panes = createPanes(options);
 
@@ -71,8 +92,18 @@ const put: boolean = panes.setLayout(layout);
 const grew: boolean = panes.add('file-1',
                                 { near: 'editor', focus: false, keep: true });
 const states: PaneState[] = panes.panes();
+const where: 'front' | 'behind' | 'drawer' | 'off' | 'document' =
+    states[0].where;
+const kind: 'lasting' | 'ephemeral' = states[0].kind;
+const seen: boolean = states[0].visible;
 
-void states;
+void where;
+void kind;
+void seen;
+
+panes.add('file-2');
+panes.present('file-2');
+panes.setLayouts({ default: layout });
 const gone: HTMLElement | null = panes.remove('file-1');
 
 void grew;
