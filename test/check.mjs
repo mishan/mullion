@@ -389,15 +389,13 @@ try
        it was scrolled to: a box moved into or out of one that is not
        displayed is scrolled to the start in Chromium however it is
        moved, which is why a pane put away is not drawn rather than not
-       displayed. */
+       displayed. Where it was scrolled to is kept in every browser; the
+       <iframe> only where there is `moveBefore' to keep it. */
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
 
     const collapsed = await page.evaluate(async () =>
     {
-        if (Element.prototype.moveBefore === undefined)
-            return null;
-
         const wait = (ms) => new Promise((go) => setTimeout(go, ms));
         const loads = { list: 0, wide: 0 };
         const frames = Object.keys(loads).map((id) =>
@@ -436,12 +434,13 @@ try
         frames.forEach((frame) => frame.remove());
 
         return { was: { list: was.list, wide: was.wide, scroll: was.scroll },
-                 now: { ...loads, up, scroll } };
+                 now: { ...loads, up, scroll },
+                 moves: Element.prototype.moveBefore !== undefined };
     });
 
-    if (collapsed === null)
-        process.stdout.write('skip  a pane moved by a collapse keeps its ' +
-                             '<iframe>: no moveBefore here\n');
+    if (!collapsed.moves)
+        skip('a pane moved by a collapse keeps its <iframe>: no ' +
+             'moveBefore here');
     else
     {
         check(collapsed.now.up && collapsed.now.list === collapsed.was.list,
@@ -452,44 +451,44 @@ try
         check(collapsed.now.wide === collapsed.was.wide,
               'and nor does the pane closed on the way, or reopened: ' +
               `${collapsed.was.wide} then ${collapsed.now.wide}`);
-
-        check(collapsed.was.scroll > 0 &&
-              collapsed.now.scroll === collapsed.was.scroll,
-              'and that pane is scrolled where it was when it comes back: ' +
-              `${collapsed.was.scroll} then ${collapsed.now.scroll}`);
-
-        /* And a pane behind a tab in the leaf that goes up a level,
-           which is moved with it and is not displayed either. */
-        await page.keyboard.press('Alt+Digit0');
-        await page.waitForTimeout(200);
-        await drag('#panetab-fx-wide', '#pane-fx-list .panebody');
-
-        const tucked = await page.evaluate(async () =>
-        {
-            const wait = (ms) => new Promise((go) => setTimeout(go, ms));
-            const scroller = document.getElementById('fx-scroll');
-
-            scroller.scrollLeft = 350;
-
-            const was = scroller.scrollLeft;
-
-            document.getElementById('panetab-fx-list').click();
-            await wait(100);
-
-            const behind = !scroller.checkVisibility();
-
-            window.tiler.pane('close', 'fx-plot');
-            await wait(150);
-            document.getElementById('panetab-fx-wide').click();
-            await wait(150);
-
-            return { was, behind, now: scroller.scrollLeft };
-        });
-
-        check(tucked.was > 0 && tucked.behind && tucked.now === tucked.was,
-              'and a pane behind a tab in it is scrolled where it was: ' +
-              `${tucked.was} then ${tucked.now}`);
     }
+
+    check(collapsed.was.scroll > 0 &&
+          collapsed.now.scroll === collapsed.was.scroll,
+          'and that pane is scrolled where it was when it comes back: ' +
+          `${collapsed.was.scroll} then ${collapsed.now.scroll}`);
+
+    /* And a pane behind a tab in the leaf that goes up a level,
+       which is moved with it and is not displayed either. */
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+    await drag('#panetab-fx-wide', '#pane-fx-list .panebody');
+
+    const tucked = await page.evaluate(async () =>
+    {
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const scroller = document.getElementById('fx-scroll');
+
+        scroller.scrollLeft = 350;
+
+        const was = scroller.scrollLeft;
+
+        document.getElementById('panetab-fx-list').click();
+        await wait(100);
+
+        const behind = !scroller.checkVisibility();
+
+        window.tiler.pane('close', 'fx-plot');
+        await wait(150);
+        document.getElementById('panetab-fx-wide').click();
+        await wait(150);
+
+        return { was, behind, now: scroller.scrollLeft };
+    });
+
+    check(tucked.was > 0 && tucked.behind && tucked.now === tucked.was,
+          'and a pane behind a tab in it is scrolled where it was: ' +
+          `${tucked.was} then ${tucked.now}`);
 
     /* ---- the dividers ---- */
 
