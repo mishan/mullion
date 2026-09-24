@@ -42,6 +42,7 @@ const options: PanesOptions = {
     closed: 'More:',
     reset: 'Reset layout',
     onLayout: (tree: PaneNode, mode: string) => { void tree; void mode; },
+    version: 2,
 };
 
 /* And a storage that answers later, which is a server. */
@@ -62,7 +63,11 @@ panes.close('console');
 panes.reset();
 panes.setTitle('editor', 'notes.txt');
 panes.setLayouts({ default: { tabs: ['editor'] } },
-                 { store: 'side', split: 18 });
+                 { store: 'side', split: 18, version: 'b' });
+
+const put: boolean = panes.setLayout(layout);
+
+void put;
 panes.destroy();
 
 const answers: [boolean, boolean, PaneNode | null, HTMLElement] =

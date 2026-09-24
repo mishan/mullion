@@ -470,6 +470,17 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     border-radius: 4px;
 }
 
+/* And where it would land in a strip: a line between two tabs, centered
+   on the gap. */
+.panedrop.paneslot
+{
+    width: 3px;
+    border: 0;
+    border-radius: 2px;
+    background: var(--pane-held, AccentColor);
+    transform: translateX(-50%);
+}
+
 .panebody
 {
     flex: 1 1 auto;
