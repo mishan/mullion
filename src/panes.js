@@ -55,8 +55,15 @@
  * are the DRAWER: listed above the layout, one click from being put back.
  * A pane is closed to it by the cross on its own tab, by Alt W, or by
  * dragging its tab onto the drawer, and reopened by the button there
- * with its name on. Nothing is ever destroyed -- closing a pane is
- * putting it away, which is why there is nowhere here that makes one.
+ * with its name on. Nothing a person does destroys a pane -- closing one
+ * is putting it away.
+ *
+ * THE PAGE OWNS WHAT IS IN A PANE, and so when one begins and ends. The
+ * catalog is what it has to start with; `add' takes on an element it
+ * puts into the document later, and `remove' hands one back. A pane it
+ * adds is ephemeral unless it asks otherwise: closing it asks the page,
+ * through onDiscard, rather than filling the drawer with every file
+ * anybody ever opened. Nothing here makes an element or deletes one.
  *
  * Two canvases stacked as tabs is where the tiling pays for itself: the
  * one behind stops drawing.
@@ -65,9 +72,12 @@
  * answer as the default: the screen worth tiling on (`media'), a
  * divider's thickness and a leaf's floor (`split', `leaf'), how much of
  * a leaf's edge is an edge (`edge'), the query parameter that turns it
- * on (`param'), where a layout is kept (`storage'), and the chords
- * (`keys'). None of them is a rule -- they are what this page would have
- * hardcoded, written where somebody else can disagree.
+ * on (`param'), where a layout is kept (`storage'), the chords (`keys'),
+ * how a strip too narrow for its tabs takes them (`strip'), which panes
+ * alone in a leaf go without one (`lone'), the drawer's label (`closed')
+ * and a button to start over (`reset'). None of them is a rule -- they
+ * are what this page would have hardcoded, written where somebody else
+ * can disagree.
  */
 
 /* The screen a tiled layout is worth having on. Both halves matter, and
