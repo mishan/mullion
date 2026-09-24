@@ -14,7 +14,7 @@
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
  * not a still of the result. This drives demo/index.html the way a
- * person would -- edit, stack, split, close, zoom, switch -- and writes:
+ * person would -- stack, split, close, zoom, switch -- and writes:
  *
  *   demo/mullion.gif   the loop the README shows
  *   demo/mullion.png   a still of the layout, for anywhere a gif is wrong
@@ -200,24 +200,6 @@ const press = async (chord, caption) =>
     await page.keyboard.press(chord);
     await wait(900);
 };
-
-/* An edit, typed: the lights another color, and the preview runs it.
-   A color and not more of them, since every lit window is redrawn every
-   frame and the gif pays for each one. */
-await click('#ed-js textarea', { x: 0.3, y: 0.3 });
-await page.evaluate(() =>
-{
-    const area = document.querySelector('#ed-js textarea');
-    const was = '255, 196, 92';
-    const at = area.value.indexOf(was);
-
-    area.setSelectionRange(at, at + was.length);
-});
-await wait(400);
-await page.keyboard.type('255, 0, 255', { delay: 110 });
-await wait(500);
-await page.keyboard.press('Home');
-await wait(1100);
 
 /* The Console stacked over the Preview. The Preview is behind a tab now,
    its program is held, and the Activity chart -- in front where the
