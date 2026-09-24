@@ -6,22 +6,28 @@
  */
 
 /*
- * shot.mjs -- the picture in the README, made rather than taken.
+ * shot.mjs -- the pictures of the playground, made rather than taken.
  *
  *   npm install && npx playwright install chromium
  *   node tools/shot.mjs            # needs ffmpeg on the PATH for the gif
  *
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
- * not a still of the result. This drives test/fixture/index.html the
- * way a person would -- split, stack, close, reopen, zoom -- and writes:
+ * not a still of the result. This drives demo/index.html the way a
+ * person would -- edit, stack, split, close, zoom, switch -- and writes:
  *
  *   demo/mullion.gif   the loop the README shows
  *   demo/mullion.png   a still of the layout, for anywhere a gif is wrong
+ *   demo/og.png        the picture a link to the demo is shown with
+ *
+ * The loop has one thing to show that a still cannot: a Preview stacked
+ * behind another tab stops drawing, and the Activity chart beside it
+ * says so.
  *
  * The pointer is drawn by this file and not by the browser: a recording
  * of a drag with no cursor in it is a layout rearranging itself for no
- * reason. It is the only thing here the page does not already do.
+ * reason. So is a chord nobody can see pressed, so those are captioned.
+ * Both are the only things here the page does not already do.
  */
 
 import fs from 'node:fs/promises';
@@ -41,14 +47,17 @@ const out = path.join(here, '..', 'demo');
 
 const SIZE = { width: 1280, height: 720 };
 const WIDE = 840;               /* what the gif is scaled to */
-const FPS = 10;
+const FPS = 8;
+const OG = { width: 1200, height: 630 };
 
-/* A pointer, since the browser does not record its own. */
-const CURSOR = () =>
+/* A pointer, since the browser does not record its own, and a caption
+   for a key pressed. */
+const DRESS = () =>
 {
     const dot = document.createElement('div');
+    const cap = document.createElement('div');
 
-    dot.dataset.shotCursor = '';
+    dot.dataset.shot = '';
     dot.style.cssText = [
         'position: fixed', 'z-index: 2147483647', 'pointer-events: none',
         'width: 14px', 'height: 14px', 'margin: -7px 0 0 -7px',
@@ -56,10 +65,21 @@ const CURSOR = () =>
         'border: 2px solid #ffffff',
         'box-shadow: 0 1px 4px rgba(0,0,0,0.4)',
         'transition: transform 80ms ease-out',
-        'transform: scale(1)',
+        'transform: scale(1)', 'left: -20px', 'top: -20px',
     ].join(';');
 
-    document.body.append(dot);
+    cap.dataset.shot = '';
+    cap.style.cssText = [
+        'position: fixed', 'z-index: 2147483647', 'pointer-events: none',
+        'left: 50%', 'bottom: 48px', 'transform: translateX(-50%)',
+        'padding: 8px 16px', 'border-radius: 10px',
+        'font: 600 18px/1.2 system-ui, sans-serif', 'color: #ffffff',
+        'background: rgba(24,24,32,0.85)',
+        'box-shadow: 0 4px 16px rgba(0,0,0,0.3)',
+        'opacity: 0', 'transition: opacity 200ms',
+    ].join(';');
+
+    document.body.append(dot, cap);
 
     addEventListener('mousemove', (e) =>
     {
@@ -71,12 +91,47 @@ const CURSOR = () =>
                      () => { dot.style.transform = 'scale(0.6)'; }, true);
     addEventListener('mouseup',
                      () => { dot.style.transform = 'scale(1)'; }, true);
+
+    let fading = 0;
+
+    window.shotCaption = (text) =>
+    {
+        cap.textContent = text;
+        cap.style.opacity = '1';
+        clearTimeout(fading);
+        fading = setTimeout(() => { cap.style.opacity = '0'; }, 1300);
+    };
 };
 
 const site = await serve(path.join(here, '..'));
-const base = `http://127.0.0.1:${site.address().port}/test/fixture/index.html`;
+const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
 const films = await fs.mkdtemp(path.join(os.tmpdir(), 'mullion-'));
 const browser = await chromium.launch();
+
+/* The page as a first visit finds it: no edits, no layouts, no mode. */
+const fresh = async (page) =>
+{
+    await page.goto(base);
+    await page.waitForFunction(() => window.playground !== undefined);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await page.waitForFunction(() => window.playground?.tiled());
+};
+
+/* ---- the picture a link is shown with ---- */
+
+{
+    const context = await browser.newContext({ viewport: OG,
+                                               deviceScaleFactor: 1 });
+    const page = await context.newPage();
+
+    await fresh(page);
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: path.join(out, 'og.png') });
+    await context.close();
+}
+
+/* ---- the loop ---- */
 
 const context = await browser.newContext({
     viewport: SIZE,
@@ -85,20 +140,21 @@ const context = await browser.newContext({
 });
 
 const page = await context.newPage();
+const began = Date.now();
 
-await page.goto(base);
-await page.waitForFunction(() => window.tiler !== undefined);
-
-/* The layout this opens on, whatever the last run left behind. */
-await page.evaluate(() => localStorage.clear());
-await page.reload();
-await page.waitForFunction(
-    () => window.tiler !== undefined && document.body.classList.contains('tiled'));
+await fresh(page);
 
 /* After the load and not before it: a node appended to <html> while the
    parser is still on its way to <body> does not survive the trip. */
-await page.evaluate(CURSOR);
-await page.waitForTimeout(500);
+await page.evaluate(DRESS);
+
+/* The recording starts with the page, and the loop with the layout: what
+   came before it -- a blank page, the plain one, a reload -- is cut. */
+await page.waitForTimeout(600);
+
+const cut = (Date.now() - began) / 1000;
+
+await page.waitForTimeout(600);
 
 const wait = (ms) => page.waitForTimeout(ms);
 
@@ -116,6 +172,15 @@ const to = async (target, where) =>
     await page.mouse.move(p.x, p.y, { steps: 24 });
 };
 
+const click = async (target, where) =>
+{
+    await to(target, where);
+    await wait(200);
+    await page.mouse.down();
+    await wait(80);
+    await page.mouse.up();
+};
+
 const drag = async (from, target, where) =>
 {
     await to(from);
@@ -123,83 +188,111 @@ const drag = async (from, target, where) =>
     await page.mouse.down();
     await wait(200);
     await to(target, where);
-    await wait(350);
+    await wait(400);
     await page.mouse.up();
     await wait(600);
 };
 
-const press = async (chord) =>
+const press = async (chord, caption) =>
 {
+    await page.evaluate((c) => window.shotCaption(c), caption);
+    await wait(350);
     await page.keyboard.press(chord);
     await wait(900);
 };
 
+/* An edit, typed: more of the windows lit, and the preview runs it. */
+await click('#ed-js textarea', { x: 0.3, y: 0.3 });
+await page.evaluate(() =>
+{
+    const area = document.querySelector('#ed-js textarea');
+    const at = area.value.indexOf('< 0.3');
+
+    area.setSelectionRange(at + 2, at + 5);
+});
+await wait(400);
+await page.keyboard.type('0.7', { delay: 180 });
+await wait(500);
+await page.keyboard.press('Home');
+await wait(1500);
+
+/* The Console stacked over the Preview. The Preview is behind a tab now,
+   its program is held, and the Activity chart -- in front where the
+   Console was -- drops to nothing. */
+await drag('#panetab-console', '#pane-preview .panebody');
+await wait(3200);
+
+/* And raised again, and it draws again. */
+await click('#panetab-preview');
+await wait(2400);
+
+/* The Files closed into the drawer, and the Keys out of it onto the
+   bottom edge of the editor: a split. */
+await drag('#panetab-files', '.panedrawer');
+await wait(500);
+await drag('#panereopen-keys', '#pane-ed-js .panebody', { x: 0.5, y: 0.92 });
+await wait(1200);
+
 /* A divider, moved. */
 await to('#root > .panebox > .panesplit');
-await wait(400);
+await wait(300);
 await page.mouse.down();
-await page.mouse.move(SIZE.width * 0.52, SIZE.height / 2, { steps: 20 });
+await page.mouse.move(SIZE.width * 0.62, SIZE.height / 2, { steps: 20 });
 await wait(250);
-await page.mouse.move(SIZE.width * 0.44, SIZE.height / 2, { steps: 20 });
+await page.mouse.move(SIZE.width * 0.5, SIZE.height / 2, { steps: 20 });
 await page.mouse.up();
 await wait(700);
 
-/* A tab onto a pane: two canvases stacked, and one of them stops. */
-await drag('#panetab-fx-plot', '#pane-fx-paint .panebody');
+/* One pane filling the layout. */
+await click('#panetab-preview');
+await wait(300);
+await press('Alt+Enter', 'Alt  Enter — zoom');
 await wait(900);
-await to('#panetab-fx-paint');
-await page.mouse.click(...Object.values(await at('#panetab-fx-paint')));
-await wait(900);
+await press('Alt+Enter', 'Alt  Enter');
 
-/* A tab onto an edge: a split. */
-await drag('#panetab-fx-plot', '#pane-fx-doc', { x: 0.5, y: 0.9 });
-await wait(700);
-
-/* A tab onto the drawer: closed, and one click from coming back. */
-await drag('#panetab-fx-list', '.panedrawer');
+/* Another mode's layout, and back. */
+await click('[data-mode="debug"]');
+await wait(1800);
+await click('[data-mode="write"]');
 await wait(900);
-await to('#panereopen-fx-list');
-await page.mouse.click(...Object.values(await at('#panereopen-fx-list')));
-await wait(900);
-
-/* And one pane filling the layout -- the one with something moving in
-   it, since a still of an empty box says nothing about zoom. */
-await page.mouse.click(...Object.values(await at('#panetab-fx-paint')));
-await wait(400);
-await press('Alt+Enter');
-await wait(600);
-await press('Alt+Enter');
 
 /* Back where it started, so the loop closes. */
-await press('Alt+Digit0');
-await wait(900);
+await page.mouse.move(SIZE.width * 0.5, SIZE.height * 0.45, { steps: 20 });
+await press('Alt+Digit0', 'Alt  0 — start over');
+await wait(1400);
 
-/* The still is of the layout and not of the recording, so the pointer
-   this file drew comes back out of it first. */
-await page.evaluate(
-    () => document.querySelector('[data-shot-cursor]')?.remove());
+/* The still is of the layout and not of the recording, so what this file
+   drew comes back out of it first. */
+await page.evaluate(() =>
+    document.querySelectorAll('[data-shot]').forEach((n) => n.remove()));
 await page.screenshot({ path: path.join(out, 'mullion.png') });
 
 const film = await page.video().path();
 
 await context.close();
+
 await browser.close();
 site.close();
 
 /* webm to gif, through a palette of its own: the default 216 colors turn
-   a page of flat grays into bands. */
+   a page of flat grays into bands. Sixty-four of its own are plenty for
+   a page of flat grays, and undithered: the preview animates every
+   frame, and a dither pattern over it is noise the gif pays for each
+   time. */
 const palette = path.join(films, 'palette.png');
 const filters = `fps=${FPS},scale=${WIDE}:-1:flags=lanczos`;
+const from = ['-ss', String(cut), '-i', film];
 
-await run('ffmpeg', ['-y', '-i', film, '-vf', `${filters},palettegen=stats_mode=diff`,
+await run('ffmpeg', ['-y', ...from, '-vf',
+                     `${filters},palettegen=stats_mode=diff:max_colors=64`,
                      palette]);
-await run('ffmpeg', ['-y', '-i', film, '-i', palette, '-lavfi',
-                     `${filters} [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle`,
+await run('ffmpeg', ['-y', ...from, '-i', palette, '-lavfi',
+                     `${filters} [x]; [x][1:v] paletteuse=dither=none:diff_mode=rectangle`,
                      path.join(out, 'mullion.gif')]);
 
 await fs.rm(films, { recursive: true, force: true });
 
-for (const name of ['mullion.gif', 'mullion.png'])
+for (const name of ['mullion.gif', 'mullion.png', 'og.png'])
 {
     const { size } = await fs.stat(path.join(out, name));
 

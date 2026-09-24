@@ -30,6 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The page the site's address redirects to has the preview tags as
+      # well: whatever unfurls a link reads the page it was given and does
+      # not follow a meta refresh to find the demo's.
       - name: Assemble the site
         run: |
           mkdir -p _site
@@ -40,6 +43,11 @@ jobs:
           <head>
           <meta charset="utf-8">
           <title>mullion</title>
+          <meta property="og:title" content="mullion · playground">
+          <meta property="og:description" content="A tiling layout for a page you already have: splits, tabs and a drawer over an ordinary document, and work behind a tab that stops.">
+          <meta property="og:url" content="https://mishan.github.io/mullion/">
+          <meta property="og:image" content="https://mishan.github.io/mullion/demo/og.png">
+          <meta name="twitter:card" content="summary_large_image">
           <meta http-equiv="refresh" content="0; url=demo/">
           </head>
           <body><p><a href="demo/">The demo</a>.</p></body>

@@ -289,7 +289,7 @@ const say = (level, text, line) =>
         const time = document.createElement('time');
         const body = document.createElement('span');
 
-        li.className = level;
+        li.className = `lv-${level}`;
         li.dataset.level = level;
         li.dataset.text = text;
         li.dataset.n = 1;
@@ -347,20 +347,16 @@ const empty = () =>
 $('clear').addEventListener('click', empty);
 empty();
 
-frame.addEventListener('load', () =>
-{
-    if (frame.srcdoc !== '')
-        say('sys', 'Preview loaded');
-
-    tell(frame, onScreen.get('preview'));
-});
+frame.addEventListener('load', () => tell(frame, onScreen.get('preview')));
 
 addEventListener('message', (e) =>
 {
     if (e.source !== frame.contentWindow || e.data?.playground !== 1)
         return;
 
-    if (e.data.kind === 'log')
+    if (e.data.kind === 'start')
+        say('sys', 'Preview started');
+    else if (e.data.kind === 'log')
         say(e.data.level === 'info' || e.data.level === 'debug'
                 ? 'log' : e.data.level,
             e.data.text, e.data.line);

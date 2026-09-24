@@ -193,10 +193,10 @@ try
     await page.click('#run');
 
     const where = await until(page, () =>
-        [...document.querySelectorAll('#log .error .where')]
+        [...document.querySelectorAll('#log .lv-error .where')]
             .some((n) => n.textContent === 'app.js:3'));
     const said = await page.evaluate(() =>
-        [...document.querySelectorAll('#log .error')]
+        [...document.querySelectorAll('#log .lv-error')]
             .map((n) => n.textContent).join(' | '));
 
     check(where,

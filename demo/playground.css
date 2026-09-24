@@ -408,9 +408,9 @@ html:not(.forced) .if-forced { display: none; }
     border-radius: 1em;
 }
 
-.log .warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
-.log .error { color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
-.log .sys { color: var(--muted); font-style: italic; }
+.log .lv-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.log .lv-error { color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.log .lv-sys { color: var(--muted); font-style: italic; }
 .log .empty { color: var(--muted); border: 0; }
 
 /* ---- activity ---- */
