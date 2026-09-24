@@ -14,7 +14,7 @@
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
  * not a still of the result. This drives demo/index.html the way a
- * person would -- edit, stack, split, close, zoom, switch -- and writes:
+ * person would -- stack, split, close, zoom, switch -- and writes:
  *
  *   demo/mullion.gif   the loop the README shows
  *   demo/mullion.png   a still of the layout, for anywhere a gif is wrong
@@ -201,37 +201,22 @@ const press = async (chord, caption) =>
     await wait(900);
 };
 
-/* An edit, typed: more of the windows lit, and the preview runs it. */
-await click('#ed-js textarea', { x: 0.3, y: 0.3 });
-await page.evaluate(() =>
-{
-    const area = document.querySelector('#ed-js textarea');
-    const at = area.value.indexOf('< 0.3');
-
-    area.setSelectionRange(at + 2, at + 5);
-});
-await wait(400);
-await page.keyboard.type('0.7', { delay: 180 });
-await wait(500);
-await page.keyboard.press('Home');
-await wait(1500);
-
 /* The Console stacked over the Preview. The Preview is behind a tab now,
    its program is held, and the Activity chart -- in front where the
    Console was -- drops to nothing. */
 await drag('#panetab-console', '#pane-preview .panebody');
-await wait(3200);
+await wait(2800);
 
 /* And raised again, and it draws again. */
 await click('#panetab-preview');
-await wait(2400);
+await wait(1900);
 
 /* The Files closed into the drawer, and the Keys out of it onto the
    bottom edge of the editor: a split. */
 await drag('#panetab-files', '.panedrawer');
 await wait(500);
 await drag('#panereopen-keys', '#pane-ed-js .panebody', { x: 0.5, y: 0.92 });
-await wait(1200);
+await wait(900);
 
 /* A divider, moved. */
 await to('#root > .panebox > .panesplit');
@@ -247,12 +232,12 @@ await wait(700);
 await click('#panetab-preview');
 await wait(300);
 await press('Alt+Enter', 'Alt  Enter — zoom');
-await wait(900);
+await wait(400);
 await press('Alt+Enter', 'Alt  Enter');
 
 /* Another mode's layout, and back. */
 await click('[data-mode="debug"]');
-await wait(1800);
+await wait(1300);
 await click('[data-mode="write"]');
 await wait(900);
 
