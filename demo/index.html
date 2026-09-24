@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="mullion, tiling a code playground: an ordinary page of sections, adopted into splits, tabs and a drawer.">
+<title>mullion · playground</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='14' height='14' rx='3' fill='%235b63d3'/%3E%3Cpath d='M8 3v10M3 8h10' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="../src/panes.css">
+<link rel="stylesheet" href="playground.css">
+</head>
+<body>
+
+<!--
+  A small code playground, and an ordinary page: a header, then a
+  <section> for each thing it has, in the order you would read them.
+  Everything with `data-pane' on it is what mullion adopts on a window
+  wide enough; on anything narrower, or with ?panes=0, this is the page
+  you get, and it is the same page.
+-->
+
+<header class="bar">
+  <a class="brand" href="https://github.com/mishan/mullion">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3"/><path d="M8 3v10M3 8h10"/></svg>
+    mullion
+  </a>
+  <span class="what">playground</span>
+
+  <div class="modes" role="group" aria-label="Layout">
+    <button type="button" data-mode="write" aria-pressed="true">Write</button>
+    <button type="button" data-mode="debug" aria-pressed="false">Debug</button>
+  </div>
+
+  <span class="grow"></span>
+
+  <a class="to-plain" href="?panes=0" title="The same page, with the tiler off">Plain page</a>
+  <a class="to-tiled" href="./">Tiled</a>
+  <a href="https://github.com/mishan/mullion">GitHub</a>
+</header>
+
+<p class="plain-note">
+  This is the page mullion tiles, untiled: the same sections, in the
+  order they were written.
+  <span class="if-narrow">On a window wider than 60em, with a mouse,
+  they become panes.</span>
+  <span class="if-forced"><a href="./">Tile it again.</a></span>
+</p>
+
+<div id="root"></div>
+
+<section id="files" data-pane data-pane-title="Files" data-pane-min="150">
+  <h2 class="head">Files</h2>
+  <ul class="files">
+    <li><button type="button" data-open="ed-html"><span class="ext ext-html">&lt;&gt;</span>index.html</button></li>
+    <li><button type="button" data-open="ed-css"><span class="ext ext-css">#</span>style.css</button></li>
+    <li><button type="button" data-open="ed-js"><span class="ext ext-js">JS</span>app.js</button></li>
+  </ul>
+  <p class="aside">Edits are kept in this browser.</p>
+  <button type="button" id="reset" class="quiet">Reset examples</button>
+</section>
+
+<section id="ed-html" data-pane data-pane-title="index.html" data-pane-min="260">
+  <h2 class="head">index.html</h2>
+  <div class="editor" data-lang="html"><textarea aria-label="index.html">&lt;h1&gt;Night shift&lt;/h1&gt;
+&lt;p&gt;Every window is a pane. Click one to flip its light.&lt;/p&gt;
+
+&lt;canvas id="city" width="480" height="280"&gt;&lt;/canvas&gt;
+
+&lt;button id="out"&gt;Lights out&lt;/button&gt;
+</textarea></div>
+</section>
+
+<section id="ed-css" data-pane data-pane-title="style.css" data-pane-min="260">
+  <h2 class="head">style.css</h2>
+  <div class="editor" data-lang="css"><textarea aria-label="style.css">body {
+  margin: 1rem;
+  font: 14px/1.4 system-ui, sans-serif;
+  background: #0f1320;
+  color: #e8e6f0;
+}
+
+h1 { font-size: 1.1rem; margin: 0 0 0.25rem; }
+p { margin: 0 0 0.75rem; color: #9aa0b8; }
+
+canvas {
+  display: block;
+  /* As wide as there is room for, and never taller than the frame. */
+  width: min(100%, 480px, (100vh - 9rem) * 12 / 7);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button {
+  margin-top: 0.75rem;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  color: inherit;
+  background: #1d2338;
+  border: 1px solid #39405a;
+  border-radius: 6px;
+  cursor: pointer;
+}
+</textarea></div>
+</section>
+
+<section id="ed-js" data-pane data-pane-title="app.js" data-pane-min="260">
+  <h2 class="head">app.js</h2>
+  <div class="editor" data-lang="js"><textarea aria-label="app.js">const canvas = document.getElementById('city');
+const ctx = canvas.getContext('2d');
+
+const COLS = 12;
+const ROWS = 7;
+const W = canvas.width / COLS;
+const H = canvas.height / ROWS;
+
+// Which windows have a light on.
+const lit = Array.from({ length: COLS * ROWS }, () =&gt; Math.random() &lt; 0.3);
+
+function draw (t) {
+  const glow = 0.85 + 0.15 * Math.sin(t / 400);
+
+  ctx.fillStyle = '#151a2b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  lit.forEach((on, i) =&gt; {
+    const x = (i % COLS) * W;
+    const y = Math.floor(i / COLS) * H;
+
+    ctx.fillStyle = on ? `rgba(255, 196, 92, ${glow})` : '#232a42';
+    ctx.fillRect(x + 5, y + 5, W - 10, H - 10);
+  });
+
+  // Now and then somebody gets up, or goes to bed.
+  if (Math.random() &lt; 0.04) {
+    const i = Math.floor(Math.random() * lit.length);
+    lit[i] = !lit[i];
+  }
+
+  requestAnimationFrame(draw);
+}
+
+canvas.addEventListener('click', (e) =&gt; {
+  const r = canvas.getBoundingClientRect();
+  const col = Math.floor((e.clientX - r.left) / r.width * COLS);
+  const row = Math.floor((e.clientY - r.top) / r.height * ROWS);
+  const i = row * COLS + col;
+
+  lit[i] = !lit[i];
+  console.log(`window ${col},${row}`, lit[i] ? 'on' : 'off');
+});
+
+document.getElementById('out').addEventListener('click', () =&gt; {
+  const were = lit.filter(Boolean).length;
+
+  lit.fill(false);
+  console.warn(`${were} lights out`);
+});
+
+console.log(`${COLS * ROWS} windows, ${lit.filter(Boolean).length} lit`);
+requestAnimationFrame(draw);
+</textarea></div>
+</section>
+
+<section id="preview" data-pane data-pane-title="Preview" data-pane-min="260">
+  <h2 class="head">Preview</h2>
+  <div class="tools">
+    <button type="button" id="run" title="Run (Ctrl Enter)">Run</button>
+    <label><input type="checkbox" id="auto" checked> Run on edit</label>
+    <span class="grow"></span>
+    <span id="fps" class="meter" aria-live="off"></span>
+  </div>
+  <iframe id="frame" title="Preview" sandbox="allow-scripts"></iframe>
+</section>
+
+<section id="console" data-pane data-pane-title="Console" data-pane-min="220">
+  <h2 class="head">Console</h2>
+  <div class="tools">
+    <button type="button" id="clear" class="quiet">Clear</button>
+    <span class="grow"></span>
+    <span id="tally" class="meter"></span>
+  </div>
+  <ol id="log" class="log"></ol>
+</section>
+
+<section id="activity" data-pane data-pane-title="Activity" data-pane-min="240">
+  <h2 class="head">Activity</h2>
+  <p class="aside">Frames the preview drew each second. Stack it behind
+  another tab, or close it, and it rests.</p>
+  <div class="chart"><canvas id="chart"></canvas></div>
+  <ul id="onscreen" class="onscreen" aria-label="Panes on the screen"></ul>
+</section>
+
+<details id="keys" data-pane data-pane-title="Keys" data-pane-min="220">
+  <summary>Keys and gestures</summary>
+  <table class="keys">
+    <tr><td>Drag a tab</td><td>onto a pane to stack, an edge to split, the drawer to close</td></tr>
+    <tr><td>Drag a divider</td><td>or focus it and use the arrows; double-click evens it up</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>←↑→↓</kbd></td><td>focus the pane that way</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>←↑→↓</kbd></td><td>move the pane that way</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>\</kbd> / <kbd>Alt</kbd> <kbd>-</kbd></td><td>split right / split down</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>Enter</kbd></td><td>zoom the pane in front</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>W</kbd></td><td>close it to the drawer</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>0</kbd></td><td>start this layout over</td></tr>
+    <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>run the preview</td></tr>
+  </table>
+  <p class="aside">The <kbd>Alt</kbd> chords do nothing while you are
+  typing in an editor, so they never take a character from you. Press
+  <kbd>Esc</kbd> and then <kbd>Tab</kbd> to leave an editor by keyboard.</p>
+</details>
+
+<footer class="status" id="status" aria-live="off">
+  <span id="st-panes"></span>
+  <span id="st-preview"></span>
+  <span id="st-activity"></span>
+  <span id="st-saved" class="gone"></span>
+  <span class="grow"></span>
+  <span class="hint"><kbd>Alt</kbd> arrows focus · <kbd>Alt</kbd> <kbd>Enter</kbd> zoom · <kbd>Alt</kbd> <kbd>0</kbd> reset</span>
+</footer>
+
+<script type="module" src="playground.js"></script>
+</body>
+</html>

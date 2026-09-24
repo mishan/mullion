@@ -41,3 +41,7 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - run: npm test -- ${{ matrix.browser }}
+
+      # And the playground in demo/, which is the page people are sent
+      # to and is held to working rather than to the module's promises.
+      - run: npm run test:demo -- ${{ matrix.browser }}

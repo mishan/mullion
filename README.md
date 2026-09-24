@@ -10,8 +10,9 @@ somebody else wrote.
 
 ![A tab dragged onto a pane to stack it, onto an edge to split, and onto the drawer to close it](https://raw.githubusercontent.com/mishan/mullion/main/demo/mullion.gif)
 
-**[Try it](https://mishan.github.io/mullion/)** — the same page the tests
-drive, on a window wider than 60em.
+**[Try it](https://mishan.github.io/mullion/)** — a small code playground,
+tiled, on a window wider than 60em; on anything narrower, the same page
+untiled.
 
 ```sh
 npm install mullion
@@ -255,14 +256,23 @@ npm run demo   # http://127.0.0.1:8080/demo/
 
 Or [the same page on the web](https://mishan.github.io/mullion/).
 
-`demo/` is also the fixture the tests drive, which is deliberate: what
-the module promises is about a document, and a claim about a document
-needs one with enough in it to be worth making.
+`demo/` is a code playground: an editor per file, a preview, a console,
+and a chart of what the preview drew. It is an ordinary page of
+sections, and everything mullion does to it is one `createPanes` call
+over them. The preview's program is held still while its pane is off
+the screen, the chart stops drawing behind a tab, and the Console counts
+on its tab what arrived while it was hidden. That is `onShow`, doing
+the job it is for. **Plain page** in its header turns the tiler off.
+
+The tests drive a different page, `test/fixture/`, built for the claims
+they make: a fold, a box that scrolls sideways, a popover the pane would
+clip.
 
 ```sh
 npm install && npx playwright install chromium firefox webkit
-npm test              # the demo, in Chromium
+npm test              # the fixture, in Chromium
 npm test -- firefox   # or webkit
+npm run test:demo     # the playground still works
 npm run types         # the declarations, which are hand-written
 npm run shot          # the gif above, re-recorded (needs ffmpeg)
 ```

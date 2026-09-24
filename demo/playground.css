@@ -1,0 +1,575 @@
+/*
+ * Copyright (C) 2026 Misha Nasledov
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/*
+ * playground.css -- the playground's own look, tiled and not.
+ *
+ * Three parts. A theme, mapped onto the six colors panes.css reads, so
+ * the layout wears the page's colors rather than its own. The plain
+ * page: what these sections look like as a document, which is what
+ * anybody on a phone gets. And the few rules a tiled page owes its
+ * panes -- which of its boxes takes the room there is.
+ */
+
+:root
+{
+    color-scheme: light dark;
+
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --text: #1b1e24;
+    --muted: #616875;
+    --line: #dde1e8;
+    --accent: #5b63d3;
+    --good: #1f9d6b;
+    --warn: #b7791f;
+    --bad: #d64545;
+
+    --t-com: #8a919e;
+    --t-str: #2f8a4f;
+    --t-num: #b35c00;
+    --t-key: #7340c7;
+    --t-fn: #2c6cc4;
+    --t-prop: #2c6cc4;
+    --t-sel: #a3337a;
+    --t-tag: #a3337a;
+    --t-attr: #b35c00;
+
+    --pane-fg: var(--text);
+    --pane-bg: var(--surface);
+    --pane-dim: var(--muted);
+    --pane-panel: var(--surface-2);
+    --pane-line: var(--line);
+    --pane-held: var(--accent);
+
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark)
+{
+    :root
+    {
+        --bg: #0e1014;
+        --surface: #16191f;
+        --surface-2: #1d2129;
+        --text: #e5e7eb;
+        --muted: #8c94a3;
+        --line: #2a2f39;
+        --accent: #8a93ff;
+        --good: #3ccf91;
+        --warn: #e0a64a;
+        --bad: #ff6b6b;
+
+        --t-com: #6b7280;
+        --t-str: #9ece6a;
+        --t-num: #ff9e64;
+        --t-key: #bb9af7;
+        --t-fn: #7aa2f7;
+        --t-prop: #7dcfff;
+        --t-sel: #f7768e;
+        --t-tag: #f7768e;
+        --t-attr: #e0af68;
+    }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body
+{
+    margin: 0;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text);
+    background: var(--bg);
+}
+
+a { color: var(--accent); }
+
+button
+{
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+kbd
+{
+    display: inline-block;
+    min-width: 1.5em;
+    padding: 0 0.35em;
+    font: 0.85em/1.5 var(--mono);
+    text-align: center;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+}
+
+.grow { flex: 1 1 auto; }
+
+.aside { margin: 0.5em 0; font-size: 0.9em; color: var(--muted); }
+
+/* ---- the header ---- */
+
+.bar
+{
+    display: flex;
+    align-items: center;
+    gap: 0.9em;
+    padding: 0.55em 1em;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand
+{
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    font-weight: 650;
+    font-size: 1.05em;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.brand svg { width: 1.3em; height: 1.3em; }
+.brand rect { fill: var(--accent); }
+.brand path { stroke: var(--surface); stroke-width: 1.6; }
+
+.what { color: var(--muted); }
+
+.bar > a:not(.brand)
+{
+    font-size: 0.9em;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.bar > a:not(.brand):hover { color: var(--text); }
+
+.modes
+{
+    display: flex;
+    padding: 2px;
+    margin-left: 0.6em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+}
+
+.modes button
+{
+    padding: 0.15em 0.9em;
+    font-size: 0.9em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 5px;
+}
+
+.modes button[aria-pressed="true"]
+{
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+/* What only makes sense one side of the threshold. */
+body:not(.tiled) .modes,
+body:not(.tiled) .to-plain,
+body.tiled .to-tiled,
+html:not(.forced) .to-tiled,
+body.tiled .plain-note,
+html.forced .if-narrow,
+html:not(.forced) .if-forced { display: none; }
+
+/* ---- buttons and toolbars inside the panes ---- */
+
+.tools
+{
+    display: flex;
+    align-items: center;
+    gap: 0.7em;
+    padding: 0.4em 0;
+    font-size: 0.9em;
+}
+
+.tools label { display: flex; align-items: center; gap: 0.3em; color: var(--muted); }
+
+#run, .quiet
+{
+    padding: 0.2em 0.8em;
+    border-radius: 6px;
+}
+
+#run
+{
+    color: white;
+    background: var(--accent);
+    border: 1px solid transparent;
+    font-weight: 550;
+}
+
+.quiet
+{
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+}
+
+.quiet:hover { border-color: var(--muted); }
+
+.meter
+{
+    font: 0.85em var(--mono);
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+/* ---- files ---- */
+
+.files { list-style: none; margin: 0.3em 0; padding: 0; }
+
+.files button
+{
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    width: 100%;
+    padding: 0.3em 0.5em;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+}
+
+.files button:hover { background: var(--surface-2); }
+
+.files button.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+.files button.edited::after
+{
+    content: "";
+    width: 0.45em;
+    height: 0.45em;
+    margin-left: auto;
+    border-radius: 50%;
+    background: var(--muted);
+}
+
+.ext
+{
+    width: 1.9em;
+    font: 600 0.72em var(--mono);
+    text-align: center;
+}
+
+.ext-html { color: var(--t-tag); }
+.ext-css { color: var(--t-fn); }
+.ext-js { color: var(--t-num); }
+
+/* ---- an editor ---- */
+
+.editor
+{
+    display: flex;
+    height: 20em;
+    font: 13px/1.6 var(--mono);
+    tab-size: 2;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.editor .gutter
+{
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0.6em 0.7em 0.6em 0.9em;
+    font: inherit;
+    text-align: right;
+    color: var(--muted);
+    opacity: 0.6;
+    background: var(--surface);
+    overflow: hidden;
+    user-select: none;
+}
+
+.editor .field
+{
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.editor .color,
+.editor textarea
+{
+    margin: 0;
+    padding: 0.6em 0.9em 0.6em 0.3em;
+    font: inherit;
+    letter-spacing: normal;
+    white-space: pre;
+    tab-size: inherit;
+    border: 0;
+}
+
+.editor .color
+{
+    position: absolute;
+    top: 0;
+    left: 0;
+    min-width: 100%;
+    pointer-events: none;
+    color: var(--text);
+}
+
+.editor textarea
+{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: transparent;
+    caret-color: var(--text);
+    background: transparent;
+    resize: none;
+    outline: none;
+    overflow: auto;
+}
+
+.editor textarea::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.editor:focus-within { border-color: var(--accent); }
+
+.t-com { color: var(--t-com); font-style: italic; }
+.t-str { color: var(--t-str); }
+.t-num { color: var(--t-num); }
+.t-key { color: var(--t-key); }
+.t-fn { color: var(--t-fn); }
+.t-prop { color: var(--t-prop); }
+.t-sel { color: var(--t-sel); }
+.t-tag { color: var(--t-tag); }
+.t-attr { color: var(--t-attr); }
+
+/* ---- preview ---- */
+
+#frame
+{
+    display: block;
+    width: 100%;
+    height: 24em;
+    background: #0f1320;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+/* ---- console ---- */
+
+.log
+{
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    min-height: 6em;
+    max-height: 16em;
+    overflow: auto;
+    font: 12.5px/1.5 var(--mono);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.log li
+{
+    display: flex;
+    gap: 0.8em;
+    padding: 0.2em 0.7em;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+.log time { flex: 0 0 auto; color: var(--muted); opacity: 0.8; }
+.log .text { flex: 1 1 auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log .where { flex: 0 0 auto; color: var(--muted); }
+
+.log .count
+{
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0 0.45em;
+    font-size: 0.85em;
+    color: var(--surface);
+    background: var(--muted);
+    border-radius: 1em;
+}
+
+.log .warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.log .error { color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.log .sys { color: var(--muted); font-style: italic; }
+.log .empty { color: var(--muted); border: 0; }
+
+/* ---- activity ---- */
+
+.chart
+{
+    position: relative;
+    height: 10em;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.chart canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.onscreen
+{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9em, 1fr));
+    gap: 0.2em 1em;
+    list-style: none;
+    margin: 0.7em 0 0;
+    padding: 0;
+    font-size: 0.9em;
+}
+
+.onscreen li { display: flex; align-items: center; gap: 0.45em; color: var(--muted); }
+.onscreen li.on { color: var(--text); }
+
+.dot
+{
+    flex: 0 0 auto;
+    width: 0.55em;
+    height: 0.55em;
+    border-radius: 50%;
+    border: 1.5px solid var(--muted);
+}
+
+.on > .dot, .dot.on { background: var(--good); border-color: var(--good); }
+
+/* ---- keys ---- */
+
+.keys { border-collapse: collapse; font-size: 0.92em; }
+.keys td { padding: 0.3em 0.9em 0.3em 0; vertical-align: top; }
+.keys td:first-child { white-space: nowrap; }
+.keys tr + tr td { border-top: 1px solid var(--line); }
+
+/* ---- the status bar ---- */
+
+.status
+{
+    display: flex;
+    align-items: center;
+    gap: 1.4em;
+    padding: 0.3em 1em;
+    font-size: 0.82em;
+    color: var(--muted);
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.status > span { display: flex; align-items: center; gap: 0.45em; }
+.status .hint { overflow: hidden; text-overflow: ellipsis; }
+
+#st-saved { transition: opacity 0.6s; }
+#st-saved.gone { opacity: 0; }
+
+/*
+ * ---- the plain page ----
+ *
+ * Nothing tiled: the sections one after another, as a document. Each has
+ * a heading of its own here, which a pane does not need -- its tab says
+ * the same thing.
+ */
+
+body:not(.tiled) > section,
+body:not(.tiled) > details,
+.plain-note
+{
+    max-width: 52rem;
+    margin: 1rem auto;
+    padding: 0.2rem 1.1rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.plain-note
+{
+    padding: 0.8rem 1.1rem;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+body:not(.tiled) > details > summary
+{
+    padding: 0.8rem 0;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.head { margin: 0.8rem 0 0.3rem; font-size: 1em; font-weight: 600; }
+
+body:not(.tiled) .status { display: none; }
+
+/* An editor as tall as its file, up to a point: the gutter is in the
+   flow and the text box is laid over it, so the gutter sets the height. */
+body:not(.tiled) .editor { height: auto; min-height: 8em; max-height: 28em; }
+
+@media (max-width: 40em)
+{
+    .bar { flex-wrap: wrap; row-gap: 0.3em; }
+    body:not(.tiled) > section,
+    body:not(.tiled) > details,
+    .plain-note { margin: 0.7rem 0.5rem; }
+    .editor { height: 16em; }
+    #frame { height: 20em; }
+}
+
+/*
+ * ---- tiled ----
+ *
+ * The header and the status bar keep their height; the layout takes the
+ * rest. Inside a pane, the box that wants the room takes it, and the
+ * toolbars around it keep theirs.
+ */
+
+body.tiled { padding: 0; }
+
+body.tiled .panesroot { margin: 0.5em 0.6em; }
+
+body.tiled .pane { border-radius: 8px; }
+
+body.tiled .panebody > section > .head { display: none; }
+
+body.tiled .panebody { padding: 0 0.7em 0.7em; }
+
+body.tiled .panebody:has(> section > .editor) { padding: 0; }
+
+body.tiled .editor,
+body.tiled #frame,
+body.tiled .log,
+body.tiled .chart
+{
+    flex: 1 1 0;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+}
+
+body.tiled .editor { border: 0; border-radius: 0; }
+
+body.tiled .chart { min-height: 5em; }
+
+body.tiled .tools,
+body.tiled .aside,
+body.tiled .onscreen { flex: 0 0 auto; }
+
+body.tiled .panedrawer { margin-bottom: 0.5em; }
