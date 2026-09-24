@@ -2772,6 +2772,514 @@ try
         });
     }), 'nor a pane in a shared leaf made unavailable and available again');
     }
+
+    /* ---- what a review of 0.3.0 found ----
+     *
+     * Each on a page of its own, over a root and panes made for it:
+     * `rv.make(ids, options)' puts up a tiler over sections with those
+     * ids, and `rv.async()' is a storage whose answers wait to be let go.
+     */
+    {
+    const sandbox = async () =>
+    {
+        const own = await browser.newPage({ viewport: WIDE });
+
+        own.on('pageerror', (e) => errors.push(e.message));
+        await own.goto(`${base}?panes=0`);
+        await own.waitForFunction(() => window.tiler !== undefined);
+        await own.evaluate(async () =>
+        {
+            const { createPanes } = await import('../../src/panes.js');
+            const root = document.createElement('div');
+            const home = document.createElement('div');
+
+            Object.assign(root.style, { position: 'fixed', inset: '0',
+                                        zIndex: '10', background: 'white',
+                                        display: 'flex',
+                                        flexDirection: 'column' });
+            document.body.append(root, home);
+
+            window.rv = {
+                root, home,
+                heard: [],
+                box: (id) =>
+                {
+                    const el = document.createElement('section');
+
+                    el.id = id;
+                    el.dataset.pane = '';
+                    el.dataset.paneMin = '40';
+                    el.dataset.paneTitle = id.toUpperCase();
+                    home.append(el);
+
+                    return el;
+                },
+                make: (ids, opts) =>
+                {
+                    ids.forEach((id) => window.rv.box(id));
+                    window.rv.panes = createPanes({
+                        root, catalog: ids, mode: 'm', on: true,
+                        media: 'all', param: 'review',
+                        onLayout: (t) => window.rv.heard.push(t),
+                        ...opts,
+                    });
+
+                    return window.rv.panes;
+                },
+                /* A storage that answers when told to. */
+                async: (kept = new Map()) =>
+                {
+                    const held = [];
+                    const writes = [];
+
+                    return {
+                        kept, held, writes,
+                        release: () => held.splice(0).forEach((go) => go()),
+                        getItem: (k) => new Promise((go) =>
+                            held.push(() => go(kept.get(k) ?? null))),
+                        setItem: (k, v) =>
+                        {
+                            writes.push(k);
+                            kept.set(k, v);
+                        },
+                        removeItem: (k) => { kept.delete(k); },
+                    };
+                },
+                tabs: () => JSON.stringify(((t) => t.tabs ? [t.tabs]
+                    : t.kids.map((k) => k.tabs ?? k.kids.map((j) => j.tabs)))(
+                        window.rv.panes.layout())),
+                wait: (ms) => new Promise((go) => setTimeout(go, ms)),
+            };
+        });
+
+        return own;
+    };
+
+    /* A key on a tab that is not an arrow is not the strip's. */
+    let own = await sandbox();
+
+    await own.evaluate(() => window.rv.make(['k-a', 'k-b'], {
+        layouts: { m: { tabs: ['k-a', 'k-b'], active: 1 } } }));
+
+    for (const key of ['Enter', ' ', 'x', 'Tab'])
+    {
+        await own.focus('#panetab-k-b');
+        await own.keyboard.press(key);
+    }
+
+    const keyed = await own.evaluate(() => ({
+        active: window.rv.panes.layout().active,
+        shown: document.getElementById('k-b').checkVisibility(),
+        left: document.activeElement.id !== 'panetab-k-b',
+    }));
+
+    check(keyed.active === 1 && keyed.shown && keyed.left,
+          'Enter, Space, a letter and Tab on a tab leave its leaf as it ' +
+          `was, and Tab leaves the strip: ${JSON.stringify(keyed)}`);
+
+    await own.close();
+
+    /* A tab alone in its leaf, let go over its own strip. */
+    own = await sandbox();
+    await own.evaluate(() => window.rv.make(['s-a', 's-b'], {
+        layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['s-a'] }, { tabs: ['s-b'] }] } } }));
+
+    const lone = await own.locator('#panetab-s-a').boundingBox();
+
+    await own.mouse.move(lone.x + 10, lone.y + lone.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(lone.x + 30, lone.y + lone.height / 2,
+                         { steps: 4 });
+
+    /* Measured once the drag has begun: it shows the drawer, a row above
+       the layout that was not there. */
+    const strip = await own.evaluate(() =>
+    {
+        const r = document.getElementById('panetab-s-a')
+                          .closest('.panetabs').getBoundingClientRect();
+
+        return { x: r.right - 30, y: r.top + r.height / 2 };
+    });
+
+    await own.mouse.move(strip.x, strip.y, { steps: 3 });
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    check(await own.evaluate(() => window.rv.tabs()) ===
+              '[["s-a"],["s-b"]]',
+          'a tab alone in its leaf, let go over its own strip, stays ' +
+          'where it is');
+
+    /* A render in the middle of a drag: the drag still ends, and Escape
+       is the page's again. */
+    await own.evaluate(() =>
+    {
+        window.escapes = 0;
+        addEventListener('keydown', (e) =>
+        {
+            if (e.key === 'Escape')
+                window.escapes++;
+        });
+    });
+
+    const t = await own.locator('#panetab-s-a').boundingBox();
+
+    await own.mouse.move(t.x + t.width / 2, t.y + t.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(t.x + t.width / 2 + 40, t.y + 120, { steps: 5 });
+    await own.evaluate(() => window.rv.panes.setTitle('s-b', 'Renamed'));
+    await own.mouse.move(t.x + t.width / 2 + 60, t.y + 140, { steps: 3 });
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    for (let i = 0; i < 3; i++)
+        await own.keyboard.press('Escape');
+
+    const after = await own.evaluate(() => ({
+        escapes: window.escapes,
+        drag: window.rv.root.classList.contains('panedrag'),
+    }));
+
+    check(after.escapes === 3 && !after.drag,
+          'a render in the middle of a drag leaves no drag behind, and ' +
+          `Escape reaching the page: ${JSON.stringify(after)}`);
+
+    await own.close();
+
+    /* A slow storage, and a page busy while it answers. */
+    own = await sandbox();
+
+    const slow = await own.evaluate(async () =>
+    {
+        const { rv } = window;
+        const L = { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['w-b'] }, { tabs: ['w-a', 'w-c'] }] };
+        const store = rv.async(new Map([['panes:m', JSON.stringify(L)]]));
+
+        /* 1. A pane added before the kept layout arrives, where it keeps
+              a place: what is kept is what is on the screen. */
+        rv.box('w-c');
+
+        const panes = rv.make(['w-a', 'w-b'], {
+            storage: store, later: (id) => id === 'w-c',
+            layouts: { m: { tabs: ['w-a', 'w-b'] } } });
+
+        panes.add('w-c', { focus: false });
+
+        const early = store.writes.length;
+
+        store.release();
+        await rv.wait(20);
+
+        const shown = rv.tabs();
+        const stored = JSON.stringify(JSON.parse(
+            store.kept.get('panes:m')).kids.map((k) => k.tabs));
+        const told = rv.heard.at(-1);
+        const toldTabs = JSON.stringify(told.kids.map((k) => k.tabs));
+
+        panes.destroy();
+
+        /* 2. setLayouts while a kept layout is on its way writes nothing
+              over it. */
+        rv.root.replaceChildren();
+
+        const store2 = rv.async(new Map([['panes:m', JSON.stringify(L)]]));
+        const panes2 = rv.make([], {
+            catalog: ['w-a', 'w-b', 'w-c'], storage: store2 });
+
+        panes2.setLayouts({ m: { tabs: ['w-a', 'w-b', 'w-c'] } },
+                          { store: 'side' });
+
+        const kept2 = store2.kept.get('panes:m') === JSON.stringify(L);
+
+        panes2.destroy();
+
+        /* 3. The page raising a pane already in front, while it answers:
+              nothing is told, and the kept layout still comes. */
+        rv.root.replaceChildren();
+        rv.heard.length = 0;
+
+        const store3 = rv.async(new Map([['panes:m', JSON.stringify(L)]]));
+        const panes3 = rv.make([], {
+            catalog: ['w-a', 'w-b', 'w-c'], storage: store3,
+            layouts: { m: { tabs: ['w-a', 'w-b', 'w-c'] } } });
+
+        panes3.present('w-a', { focus: false });
+
+        const heardEarly = rv.heard.length;
+
+        store3.release();
+        await rv.wait(20);
+
+        const came = rv.tabs();
+
+        panes3.destroy();
+
+        return { early, shown, stored, toldTabs, kept2, heardEarly, came };
+    });
+
+    check(slow.early === 0 && slow.shown === '[["w-b"],["w-a","w-c"]]' &&
+          slow.stored === slow.shown && slow.toldTabs === slow.shown,
+          'a pane added before a kept layout arrives writes nothing over ' +
+          'it, and once it comes what is kept and told is what is shown: ' +
+          `${slow.shown} ${slow.stored} ${slow.toldTabs}`);
+
+    check(slow.kept2,
+          'setLayouts while a kept layout is on its way writes nothing ' +
+          'over it');
+
+    check(slow.heardEarly === 0 && slow.came === '[["w-b"],["w-a","w-c"]]',
+          'a pane raised that was in front already is no change, and the ' +
+          `kept layout still comes: ${slow.came}`);
+
+    /* Writes to a storage that answers later land in the order made. */
+    const ordered = await own.evaluate(async () =>
+    {
+        const { rv } = window;
+        const kept = new Map();
+        let n = 0;
+        const panes = rv.make([], {
+            catalog: ['w-a', 'w-b', 'w-c'],
+            layouts: { m: { tabs: ['w-a', 'w-b', 'w-c'] } },
+            storage: {
+                getItem: (k) => kept.get(k) ?? null,
+                /* The first write is the slowest. */
+                setItem: (k, v) => rv.wait(n++ === 0 ? 120 : 10)
+                    .then(() => kept.set(k, v)),
+                removeItem: (k) => { kept.delete(k); },
+            },
+        });
+
+        rv.root.replaceChildren();
+        panes.present('w-b');
+        panes.present('w-c');
+        await rv.wait(300);
+
+        const last = JSON.parse(kept.get('panes:m')).active;
+
+        panes.destroy();
+
+        return last;
+    });
+
+    check(ordered === 2,
+          'writes to a storage that answers later land in the order they ' +
+          `were made: active ${ordered}`);
+
+    await own.close();
+
+    /* A pane added while its mode is down, and a front tab kept by name
+       when another in its leaf comes and goes. */
+    own = await sandbox();
+
+    const modes = await own.evaluate(() =>
+    {
+        const { rv } = window;
+        const panes = rv.make(['m-a', 'm-b', 'm-c'], {
+            layouts: { m: { tabs: ['m-a', 'm-b', 'm-c'], active: 1 } },
+            onDiscard: (id) => panes.remove(id)?.remove(),
+        });
+
+        panes.available('m-a', false);
+
+        const frontOff = panes.panes().find((p) => p.where === 'front').id;
+
+        panes.available('m-a', true);
+
+        const frontOn = panes.panes().find((p) => p.where === 'front').id;
+
+        rv.box('m-x').setAttribute('data-pane-off', '');
+        panes.add('m-x');
+        panes.available('m-x', true);
+
+        const placed = panes.panes().find((p) => p.id === 'm-x').where;
+
+        panes.destroy();
+
+        return { frontOff, frontOn, placed };
+    });
+
+    check(modes.frontOff === 'm-b' && modes.frontOn === 'm-b',
+          'the tab in front stays in front while another in its leaf goes ' +
+          `off and comes back: ${modes.frontOff} ${modes.frontOn}`);
+
+    check(modes.placed !== 'drawer' && modes.placed !== 'off',
+          'and a pane added while its mode was down is put in the layout ' +
+          `when it comes up: ${modes.placed}`);
+
+    await own.close();
+
+    /* Out of the drawer by a split is out of it, and a pane closed beside
+       a split that collapses comes back beside it. */
+    own = await sandbox();
+
+    const back = await own.evaluate(() =>
+    {
+        const { rv } = window;
+        const panes = rv.make(['d-a', 'd-b', 'd-c', 'd-d'], {
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['d-a'] },
+                { dir: 'col', size: [0.5, 0.5], kids: [
+                    { tabs: ['d-b'] }, { tabs: ['d-c'] }] }] } } });
+
+        panes.close('d-a');
+        panes.close('d-c');
+        panes.present('d-c');
+        panes.present('d-a');
+
+        const reverse = rv.tabs();
+
+        panes.destroy();
+
+        return { reverse };
+    });
+
+    check(back.reverse === '[["d-a"],[["d-b"],["d-c"]]]',
+          'panes closed one after another and brought back the other way ' +
+          `round go back where they were: ${back.reverse}`);
+
+    await own.evaluate(() => window.rv.root.replaceChildren());
+
+    const split = await own.evaluate(async () =>
+    {
+        const { rv } = window;
+        const panes = rv.make([], {
+            catalog: ['d-a', 'd-b'],
+            layouts: { m: { tabs: ['d-a'] } } });
+
+        rv.box('d-z');
+        panes.add('d-z', { keep: true });
+        panes.close('d-z');
+
+        return true;
+    });
+
+    const tray = await own.locator('#panereopen-d-z').boundingBox();
+    const leaf = await own.locator('.paneleaf').first().boundingBox();
+
+    await own.mouse.move(tray.x + tray.width / 2, tray.y + tray.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(tray.x + 40, tray.y + 60, { steps: 4 });
+    await own.mouse.move(leaf.x + leaf.width - 8, leaf.y + leaf.height / 2,
+                         { steps: 8 });
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    const splitOut = await own.evaluate(() =>
+    {
+        const { panes } = window.rv;
+        const now = panes.panes().find((p) => p.id === 'd-z').where;
+
+        panes.reset();
+
+        const afterReset = panes.panes().find((p) => p.id === 'd-z').where;
+
+        panes.destroy();
+
+        return { now, afterReset };
+    });
+
+    check(split && splitOut.now === 'front' &&
+          splitOut.afterReset !== 'drawer',
+          'a pane split out of the drawer is not put back in it by a reset: ' +
+          JSON.stringify(splitOut));
+
+    await own.close();
+
+    /* Right to left, a tab over a strip goes where the pointer is. */
+    own = await sandbox();
+    await own.evaluate(() =>
+    {
+        window.rv.root.dir = 'rtl';
+        window.rv.make(['r-a', 'r-b', 'r-c', 'r-d'], {
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['r-a', 'r-b', 'r-c'] }, { tabs: ['r-d'] }] } } });
+    });
+
+    const dragged = await own.locator('#panetab-r-d').boundingBox();
+
+    await own.mouse.move(dragged.x + dragged.width / 2,
+                         dragged.y + dragged.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(dragged.x + 30, dragged.y + 40, { steps: 4 });
+
+    const endTab = await own.locator('#panetab-r-c').boundingBox();
+
+    /* Past the last tab, which reading leftward is past its left edge. */
+    const target = { x: endTab.x - 6, y: endTab.y + endTab.height / 2 };
+
+    await own.mouse.move(target.x, target.y, { steps: 8 });
+
+    const line = await own.evaluate(() =>
+    {
+        const r = document.querySelector('.panedrop.paneslot')
+                          ?.getBoundingClientRect();
+
+        return r === undefined ? null : r.left + r.width / 2;
+    });
+
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    check(await own.evaluate(() => window.rv.tabs()) ===
+              '[["r-a","r-b","r-c","r-d"]]' &&
+          line !== null && Math.abs(line - endTab.x) <= 3,
+          'right to left, a tab over the end of a strip goes at the end, ' +
+          `and the line is drawn there: ${line} ${endTab.x}`);
+
+    await own.close();
+
+    /* One drop onto the drawer is one change, and a reset button named
+       in words is named by them. */
+    own = await sandbox();
+
+    const once = await own.evaluate(() =>
+    {
+        const { rv } = window;
+        const panes = rv.make(['o-a'], {
+            reset: 'Start over',
+            later: (id) => id === 'o-later',
+            onDiscard: (id) => panes.remove(id)?.remove() });
+
+        rv.box('o-x');
+        panes.add('o-x');
+
+        return document.querySelector('.panereset button')
+                       .getAttribute('aria-label');
+    });
+
+    await own.evaluate(() => { window.rv.heard.length = 0; });
+
+    const x = await own.locator('#panetab-o-x').boundingBox();
+
+    await own.mouse.move(x.x + x.width / 2, x.y + x.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(x.x + 30, x.y + 60, { steps: 4 });
+
+    const drawer = await own.locator('.panedrawer').boundingBox();
+
+    await own.mouse.move(drawer.x + 40, drawer.y + drawer.height / 2,
+                         { steps: 6 });
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    const heardOnce = await own.evaluate(() => window.rv.heard.length);
+
+    check(heardOnce === 1,
+          `an ephemeral pane dropped on the drawer is one change: ${heardOnce}`);
+
+    check(once === null,
+          'a reset button labeled in words is named by them');
+
+    /* And a layout of nothing but places for panes to come is refused. */
+    check(await own.evaluate(() =>
+              window.rv.panes.setLayout({ tabs: ['o-later'] }) === false),
+          'setLayout refuses a layout of nothing but places kept for panes ' +
+          'still to come');
+
+    await own.close();
+    }
 }
 catch (e)
 {

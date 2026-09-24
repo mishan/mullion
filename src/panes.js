@@ -965,6 +965,17 @@ export function createPanes ({ root, catalog, layouts, mode,
             tree = only;
         else
             over.kids[over.kids.indexOf(up)] = only;
+
+        /* A pane closed beside this split, and waiting to come back
+           beside it, comes back beside what is left of it -- and beside
+           the split again if the pane just closed out of it comes back
+           first and makes it again (see `reopen'). */
+        for (const s of spot.values())
+            if (s.next === up)
+            {
+                s.next = only;
+                s.via = up.dir;
+            }
     };
 
     /* Out of the layout: into the drawer, which is where every pane not
@@ -1167,6 +1178,16 @@ export function createPanes ({ root, catalog, layouts, mode,
                 tree = pair;
             else
                 up.kids[up.kids.indexOf(was.next)] = pair;
+
+            /* The split this was closed out of, made again: a pane
+               closed beside it before it collapsed goes beside it
+               again, not beside the one leaf that was left of it. */
+            for (const s of spot.values())
+                if (s.next === was.next && s.via === was.dir)
+                {
+                    s.next = pair;
+                    delete s.via;
+                }
         }
 
         into(id, made);
@@ -2097,7 +2118,12 @@ export function createPanes ({ root, catalog, layouts, mode,
         button.type = 'button';
         button.textContent = again;
         button.title = 'Put back the layout this page starts with';
-        button.setAttribute('aria-label', 'Reset layout');
+        /* Named "Reset layout" where what it shows is a glyph, which
+           says nothing aloud; where it shows words, those are its name,
+           since a name that is not the words on it is not one somebody
+           using speech can say to press it. */
+        if (!/\p{L}/u.test(again))
+            button.setAttribute('aria-label', 'Reset layout');
         button.addEventListener('click', () => reset());
         wrap.append(button);
         again$ = wrap;
