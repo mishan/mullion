@@ -927,8 +927,41 @@ export function createPanes ({ root, catalog, layouts, mode,
      * top. `moveBefore' is a move the document keeps state through.
      * Both ends have to be in the document for it, which every render
      * here already sees to; anything else is an ordinary insert.
+     *
+     * And where it is scrolled to, written back by hand. `moveBefore'
+     * keeps it in Chromium and not in Firefox, which keeps the <iframe>
+     * and puts every scroller in what moved back at the start -- and an
+     * ordinary insert does that everywhere.
      */
     const place = (parent, child, before = null) =>
+    {
+        const held = child.isConnected ? scrolls(child) : [];
+
+        move(parent, child, before);
+
+        for (const [box, left, top] of held)
+        {
+            if (box.scrollLeft !== left)
+                box.scrollLeft = left;
+
+            if (box.scrollTop !== top)
+                box.scrollTop = top;
+        }
+    };
+
+    /* Every box under this one that is scrolled away from its start. */
+    const scrolls = (under) =>
+    {
+        const found = [];
+
+        for (const box of [under, ...under.querySelectorAll('*')])
+            if (box.scrollLeft !== 0 || box.scrollTop !== 0)
+                found.push([box, box.scrollLeft, box.scrollTop]);
+
+        return found;
+    };
+
+    const move = (parent, child, before) =>
     {
         if (parent.moveBefore !== undefined && parent.isConnected &&
             child.isConnected)
