@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — unreleased
+## 0.3.0 — 2026-09-24
 
 A page can now add and remove panes while it is up, keep its layouts on a
 server, and put a layout up itself. A person can reorder tabs, take back
