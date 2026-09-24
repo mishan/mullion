@@ -24,7 +24,11 @@
     --text: #1b1e24;
     --muted: #616875;
     --line: #dde1e8;
-    --accent: #5b63d3;
+    /* The logo's purple, #b48cff, made darker for a light page: as it
+       is, it is too faint against white to mark the tab in front. */
+    --accent: #7f42f0;
+    --on-accent: #ffffff;
+    --logo: #b48cff;
     --good: #1f9d6b;
     --warn: #b7791f;
     --bad: #d64545;
@@ -59,7 +63,8 @@
         --text: #e5e7eb;
         --muted: #8c94a3;
         --line: #2a2f39;
-        --accent: #8a93ff;
+        --accent: #b48cff;
+        --on-accent: #16191f;
         --good: #3ccf91;
         --warn: #e0a64a;
         --bad: #ff6b6b;
@@ -137,8 +142,8 @@ kbd
 }
 
 .brand svg { width: 1.3em; height: 1.3em; }
-.brand rect { fill: var(--accent); }
-.brand path { stroke: var(--surface); stroke-width: 1.6; }
+.brand rect { fill: var(--logo); }
+.brand path { stroke: #ffffff; stroke-width: 1.6; }
 
 .what { color: var(--muted); }
 
@@ -227,7 +232,7 @@ html:not(.forced) .if-forced { display: none; }
 
 #run
 {
-    color: white;
+    color: var(--on-accent);
     background: var(--accent);
     border: 1px solid transparent;
     font-weight: 550;
