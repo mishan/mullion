@@ -1372,6 +1372,56 @@ export function createPanes ({ root, catalog, layouts, mode,
         render();
     };
 
+    /* The mode's own layout back, where a chord cannot be pressed: a
+       phone, whose only other way out of a leaf with no strip is the
+       storage in its settings. One button, kept, and put by `seat' at
+       the end of the first strip there is -- room every layout has
+       spare -- or in the drawer's row when every leaf is bare. */
+    let again$ = null;
+
+    if (again !== null)
+    {
+        const wrap = el('panereset');
+        const button = document.createElement('button');
+
+        wrap.setAttribute('role', 'presentation');
+        button.type = 'button';
+        button.textContent = again;
+        button.title = 'Put back the layout this page starts with';
+        button.setAttribute('aria-label', 'Reset layout');
+        button.addEventListener('click', () => reset());
+        wrap.append(button);
+        again$ = wrap;
+    }
+
+    const seat = () =>
+    {
+        if (again$ === null)
+            return;
+
+        /* By the tree and not the document: a render leaves the boxes
+           of a layout that is going in the root until their panes are
+           out of them. */
+        const shows = (node) =>
+            (isLeaf(node)
+                ? (liveTabs(node).length > 0 &&
+                   (zoom === null || zoom === node) &&
+                   !elementFor(node).classList.contains('panebare')
+                    ? node : null)
+                : liveKids(node).reduce((f, k) => f ?? shows(k), null));
+        const leaf = tree !== null && alive(tree) ? shows(tree) : null;
+        const strip = leaf === null ? undefined
+                                    : elementFor(leaf).firstElementChild;
+
+        if (strip !== undefined)
+            strip.append(again$);
+        else
+        {
+            tray.append(again$);
+            tray.hidden = false;
+        }
+    };
+
     /* The panes no leaf has room for, listed above the layout: one click
        from being put back, into the leaf they left or -- where that leaf
        closed with them -- whichever one was last touched. Nothing here
@@ -1383,10 +1433,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     {
         const made = [];
 
-        /* With a reset button the row is always there, since the button
-           is: a layout with nothing closed is as likely to want it as
-           one with everything closed. */
-        tray.hidden = out.length === 0 && again === null;
+        tray.hidden = out.length === 0;
 
         if (out.length > 0)
         {
@@ -1424,21 +1471,6 @@ export function createPanes ({ root, catalog, layouts, mode,
             });
 
             grab(button, id);
-            made.push(button);
-        }
-
-        /* The mode's own layout back, where a chord cannot be pressed:
-           a phone, whose only other way out of a leaf with no strip is
-           the storage in its settings. */
-        if (again !== null)
-        {
-            const button = document.createElement('button');
-
-            button.type = 'button';
-            button.className = 'panereset';
-            button.textContent = again;
-            button.title = 'Put back the layout this page starts with';
-            button.addEventListener('click', () => reset());
             made.push(button);
         }
 
@@ -1569,6 +1601,8 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (some)
             fill(tree);
+
+        seat();
 
         for (const p of panes.values())
             if (!attached.has(p.id) && p.host !== null)

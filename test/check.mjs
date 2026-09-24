@@ -1366,7 +1366,7 @@ try
             mode: 'm', layouts: { m: layout },
             on: true, media: 'all', split: 18, param: 'phone',
             strip: 'scroll', lone: ['ph-e'], closed: 'More:',
-            reset: 'Reset layout',
+            reset: '\u21ba',
             storage: { getItem: (k) => window.phoneKept.get(k) ?? null,
                        setItem: (k, v) => window.phoneKept.set(k, v),
                        removeItem: (k) => window.phoneKept.delete(k) },
@@ -1376,10 +1376,13 @@ try
             document.getElementById(`panetab-${id}`)
                     .closest('.panetabs')).display !== 'none';
         const drawer = root.querySelector('.panedrawer');
-        const button = drawer.querySelector('.panereset');
+        const button = root.querySelector('.panereset > button');
         const before = { a: shown('ph-a'), e: shown('ph-e'),
-                         row: drawer.checkVisibility(),
-                         label: button?.textContent };
+                         row: !drawer.checkVisibility(),
+                         seat: button?.closest('.panetabs') ===
+                               document.getElementById('panetab-ph-a')
+                                       .closest('.panetabs'),
+                         label: button?.getAttribute('aria-label') };
 
         window.phonePanes.close('ph-b');
 
@@ -1389,11 +1392,21 @@ try
         button.click();
 
         const back = window.phonePanes.layout();
+        const more = drawer.querySelector('.panedrawerlabel') === null;
 
-        return { ...before, closed,
+        /* And with every leaf bare there is no strip to sit in, so it
+           goes in the drawer's row, and the row shows. */
+        window.phonePanes.setLayouts({ m: { tabs: ['ph-e'] } },
+                                     { store: 'bare' });
+
+        const alone = root.querySelector('.panereset')
+                          ?.closest('.panedrawer') === drawer &&
+                      drawer.checkVisibility();
+
+        return { ...before, closed, alone,
                  reset: JSON.stringify(back.kids.map((k) => k.tabs)) ===
                         JSON.stringify(layout.kids.map((k) => k.tabs)),
-                 more: drawer.querySelector('.panedrawerlabel') === null };
+                 more };
     });
 
     check(listed.a && !listed.e,
@@ -1401,9 +1414,12 @@ try
           `leaves it on one moved into a leaf alone: ${listed.a} ` +
           `${listed.e}`);
 
-    check(listed.row && listed.label === 'Reset layout',
-          'reset puts a button in the drawer\'s row, shown with nothing ' +
-          'closed');
+    check(listed.row && listed.seat && listed.label === 'Reset layout',
+          'reset puts a button at the end of the first strip, and no ' +
+          'drawer row with nothing closed');
+
+    check(listed.alone,
+          'and in the drawer\'s row when every leaf is bare');
 
     check(listed.closed && listed.reset && listed.more,
           'and the button puts the mode\'s layout back, closed panes and ' +

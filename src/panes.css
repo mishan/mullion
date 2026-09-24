@@ -353,12 +353,19 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     touch-action: none;
 }
 
-/* The reset, at the far end of the row from the closed panes, drawn as a
-   button rather than as one of them. */
+/* The reset, at the far end of the first strip (or of the drawer's row),
+   drawn as a button rather than as a tab or a closed pane. */
 .panereset
 {
     margin-left: auto;
-    padding: 0.15em 0.6em;
+    display: flex;
+    align-items: center;
+    padding: 0 0.3em;
+}
+
+.panereset > button
+{
+    padding: 0.1em 0.5em;
     font: inherit;
     font-size: 0.85em;
     color: var(--pane-dim, #666666);
@@ -368,7 +375,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     cursor: pointer;
 }
 
-.paneclosed:hover, .panetab:hover, .panereset:hover
+.paneclosed:hover, .panetab:hover, .panereset > button:hover
 {
     color: var(--pane-fg, #202020);
 }
@@ -519,9 +526,10 @@ body.tiled .panebody { container-type: inline-size; }
 .panescroll .panetabwrap,
 .panescroll > .panedrawer > * { flex: 0 0 auto; }
 
-/* And the reset kept at the row's right edge while the closed panes
-   scroll under it: at the end of a row that scrolls it would be out of
-   sight on exactly the screen that has no chord for it. */
+/* And the reset kept at the row's right edge while the tabs or closed
+   panes scroll under it: at the end of a row that scrolls it would be out
+   of sight on exactly the screen that has no chord for it. */
+.panescroll .panetabs > .panereset,
 .panescroll > .panedrawer > .panereset
 {
     position: sticky;

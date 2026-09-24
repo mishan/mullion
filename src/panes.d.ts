@@ -87,9 +87,10 @@ export interface PanesOptions {
   lone?: boolean | string[];
   /** What the drawer of closed panes is labelled. */
   closed?: string;
-  /** A button at the end of the drawer's row that puts the mode's
-   *  default layout back, labelled with this; none when null. The row is
-   *  then shown even with nothing closed. */
+  /** A button that puts the mode's default layout back, labelled with
+   *  this (its accessible name is "Reset layout"): at the end of the
+   *  first tab strip, or in the drawer's row when every leaf is bare.
+   *  None when null. */
   reset?: string | null;
 }
 

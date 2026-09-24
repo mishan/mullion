@@ -144,7 +144,7 @@ Everything below is a default rather than a rule.
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
 | `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
 | `closed` | the drawer's label | `'Closed:'` |
-| `reset` | label for a button at the end of the drawer's row that starts the layout over; the row then always shows | `null` |
+| `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
