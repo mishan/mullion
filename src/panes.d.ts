@@ -144,8 +144,10 @@ export interface Panes {
    *  what Alt 0 does. */
   reset(): void;
   /** Raise a pane: in front of its leaf, and out of the drawer if that is
-   *  where it was. `focus: false` for a pane the page is raising at
-   *  somebody rather than for them. */
+   *  where it was -- back into the leaf it left, or beside the neighbor
+   *  it had if its leaf closed with it. `focus: false` for a pane the page
+   *  is raising at somebody rather than for them, which is never put in
+   *  front of the leaf that has the focus. */
   present(id: string, opts?: { focus?: boolean }): void;
   /** Put a pane in the drawer. */
   close(id: string): void;

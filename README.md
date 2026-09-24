@@ -87,6 +87,12 @@ A leaf holding more than one pane is tabs. The panes no leaf holds are the
 is ever destroyed — closing a pane puts it away, which is why there is
 nowhere in here that makes one.
 
+Brought back, from the drawer or by `present()`, a pane goes where it
+was: into the stack it left, or — if it was the last pane in its leaf
+and the split around it collapsed — beside the same neighbor, on the same
+side, with the same share. Where that neighbor has gone too, it goes to
+the pane last focused.
+
 ## What a person can do
 
 | | what it does |

@@ -226,6 +226,14 @@ export function createPanes ({ root, catalog, layouts, mode,
        did. */
     const home = new Map();
 
+    /* id -> where its leaf was, for a pane that was the last one in it.
+       Its leaf went with it, so `home' has nothing to offer; what is
+       left is the leaf or split it sat beside, which side, which way the
+       split ran and what share it had. The neighbor is kept and not an
+       address for the same reason: a collapse moves it up a level, and
+       it is the same object when it gets there. */
+    const spot = new Map();
+
     const screen = matchMedia(media);
     const wanted = asked(param, on);
 
@@ -772,6 +780,20 @@ export function createPanes ({ root, catalog, layouts, mode,
                                                                 : was,
                                            liveTabs(leaf).length - 1));
 
+        const up = leaf.tabs.length === 0 ? parentOf(leaf) : null;
+
+        if (up === null)
+            spot.delete(id);
+        else
+        {
+            const i = up.kids.indexOf(leaf);
+            const total = up.size.reduce((a, b) => a + b, 0);
+
+            spot.set(id, { next: up.kids[i > 0 ? i - 1 : i + 1],
+                           after: i > 0, dir: up.dir,
+                           share: up.size[i] / total });
+        }
+
         if (leaf.tabs.length === 0)
             empty(leaf);
     };
@@ -826,6 +848,72 @@ export function createPanes ({ root, catalog, layouts, mode,
             tree = pair;
         else
             up.kids[up.kids.indexOf(leaf)] = pair;
+    };
+
+    /*
+     * Back out of the drawer, to where it was: the leaf it was last in,
+     * if the tree still has it; or, if it emptied that leaf on its way
+     * out, a leaf of its own beside the neighbor it had, on the same
+     * side and with the same share -- as a sibling again where the split
+     * it was in still runs that way, or in a split of two made for it
+     * where that one collapsed. Where neither is left, into `fallback'.
+     * `avoid' is a leaf it must not be put in front of. Returns the leaf
+     * it went into.
+     */
+    const reopen = (id, fallback, avoid = null) =>
+    {
+        const back = home.get(id);
+
+        if (back !== undefined && back !== avoid && holds(back))
+        {
+            into(id, back);
+            return back;
+        }
+
+        const was = spot.get(id);
+
+        if (was === undefined || !holds(was.next))
+        {
+            into(id, fallback);
+            return fallback;
+        }
+
+        /* The leaf it left, empty, rather than a new one: another pane
+           closed beside it may be keeping it as its neighbor, and is
+           put back beside it too only if it is the same leaf. */
+        const made = back !== undefined && back.tabs.length === 0
+            ? back : { tabs: [], active: 0 };
+        const up = parentOf(was.next);
+
+        if (up !== null && up.dir === was.dir)
+        {
+            const total = up.size.reduce((a, b) => a + b, 0);
+            const i = up.kids.indexOf(was.next) + (was.after ? 1 : 0);
+
+            /* Its share back, and the rest of the split what is left,
+               in the proportions they have now. */
+            up.size = up.size.map((v) => v / total * (1 - was.share));
+            up.kids.splice(i, 0, made);
+            up.size.splice(i, 0, was.share);
+        }
+        else
+        {
+            const pair = {
+                dir: was.dir,
+                size: was.after ? [1 - was.share, was.share]
+                                : [was.share, 1 - was.share],
+                kids: was.after ? [was.next, made] : [made, was.next],
+            };
+
+            if (up === null)
+                tree = pair;
+            else
+                up.kids[up.kids.indexOf(was.next)] = pair;
+        }
+
+        into(id, made);
+
+        return made;
     };
 
     /* Whether a leaf has room to be split in a direction: both halves
@@ -1757,11 +1845,8 @@ export function createPanes ({ root, catalog, layouts, mode,
             button.title = `Reopen ${panes.get(id).title}`;
             button.addEventListener('click', () =>
             {
-                const back = home.get(id);
-                const to = back !== undefined && holds(back)
-                    ? back : focus ?? firstLeaf();
+                const to = reopen(id, focus ?? firstLeaf());
 
-                into(id, to);
                 unzoomFor(to);
                 changed();
                 render();
@@ -2336,10 +2421,13 @@ export function createPanes ({ root, catalog, layouts, mode,
             const away = busy === undefined
                 ? null : [...seen.values()].find((n) => n !== busy) ?? null;
 
-            const leaf = leafWith(id) ?? away ?? focus ?? firstLeaf();
+            /* Out of the drawer, it goes back where it was -- except in
+               front of the leaf being worked in, when raised at somebody:
+               beside it is fine, over it is not. */
+            let leaf = leafWith(id);
 
-            if (leafWith(id) === null)
-                into(id, leaf);
+            if (leaf === null)
+                leaf = reopen(id, away ?? focus ?? firstLeaf(), busy ?? null);
             else
                 leaf.active = liveTabs(leaf).indexOf(id);
 

@@ -971,6 +971,110 @@ try
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
 
+    /* ---- back where it was ----
+     *
+     * A pane that was the last in its leaf takes the leaf with it when
+     * it closes, and the split around it collapses. Brought back -- by
+     * the drawer or by name -- it is put where it was: beside the same
+     * neighbor, on the same side, with the same share. Anywhere else,
+     * and closing a pane to look at something is a layout lost.
+     */
+    {
+    /* Two layouts the same tree, shares to within rounding. */
+    const same = (a, b) =>
+        typeof a === 'number' && typeof b === 'number'
+            ? Math.abs(a - b) < 1e-6
+            : Array.isArray(a) && Array.isArray(b)
+                ? a.length === b.length && a.every((v, i) => same(v, b[i]))
+                : a !== null && b !== null && typeof a === 'object' &&
+                  typeof b === 'object'
+                    ? Object.keys(a).length === Object.keys(b).length &&
+                      Object.keys(a).every((k) => same(a[k], b[k]))
+                    : a === b;
+
+    const layout = () => page.evaluate(() => window.tiler.layout());
+    const shut = (id) =>
+        page.evaluate((one) => window.tiler.pane('close', one), id);
+    const was = await layout();
+
+    await shut('fx-list');
+    await page.click('#panereopen-fx-list');
+    await page.waitForTimeout(150);
+
+    check(same(await layout(), was),
+          'a lone pane closed and reopened from the drawer is where it was, ' +
+          'the same share of the same split');
+
+    await shut('fx-paint');
+    await page.evaluate(() =>
+        window.tiler.pane('present', 'fx-paint', { focus: false }));
+    await page.waitForTimeout(150);
+
+    check(same(await layout(), was),
+          'and presented by name, the first of its split, it is first again');
+
+    /* Two out of a split of three: the split collapses into the one
+       left, the last closed comes back as a split of two again, and the
+       first closed goes back beside it. */
+    await shut('fx-plot');
+    await shut('fx-wide');
+    await page.click('#panereopen-fx-wide');
+    await page.click('#panereopen-fx-plot');
+    await page.waitForTimeout(150);
+
+    check(same(await layout(), was),
+          'and two closed out of a split that collapsed come back, last ' +
+          'closed first, as the split it was');
+
+    /* Stacked: the leaf it was in, which is still there. */
+    await page.evaluate(() => window.tiler.pane('setLayout', {
+        dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['fx-doc', 'fx-notes'], active: 0 },
+            { tabs: ['fx-paint', 'fx-plot'] }] }));
+    await shut('fx-notes');
+    await page.click('#panereopen-fx-notes');
+    await page.waitForTimeout(150);
+
+    const stacked = await layout();
+
+    check(stacked.kids[0].tabs.join() === 'fx-doc,fx-notes',
+          'a pane closed out of a stack goes back into the same stack: ' +
+          stacked.kids[0].tabs.join());
+
+    /* But raised at somebody, not over what they are typing in. */
+    await shut('fx-notes');
+    await page.focus('#fx-text');
+    await page.evaluate(() =>
+        window.tiler.pane('present', 'fx-notes', { focus: false }));
+    await page.waitForTimeout(150);
+
+    const beside = await layout();
+
+    check(!beside.kids[0].tabs.includes('fx-notes') &&
+          await page.evaluate(() =>
+              document.activeElement.id === 'fx-text'),
+          'unless it would be raised over the text somebody is typing in');
+
+    /* And a neighbor gone as well is no place to go back to: somewhere
+       in the layout still, and nothing thrown. */
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.activeElement.blur());
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(150);
+    await shut('fx-list');
+    await shut('fx-wide');
+    await shut('fx-plot');
+    await page.click('#panereopen-fx-list');
+    await page.waitForTimeout(150);
+
+    check(await page.evaluate(() =>
+              document.getElementById('fx-list').checkVisibility()),
+          'and where its neighbors went too, it still comes back');
+
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+    }
+
     /* ---- a popover over the layout ---- */
 
     await page.keyboard.press('Alt+Digit0');
