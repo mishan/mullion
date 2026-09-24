@@ -67,6 +67,7 @@ const bare: PanesOptions = {
     storage: remote,
     lone: false,
     reset: null,
+    drawer: false,
     onDiscard: async (id: string) => { await Promise.resolve(id); },
 };
 

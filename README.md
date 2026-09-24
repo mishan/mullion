@@ -166,7 +166,7 @@ Everything below is a default rather than a rule.
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
 | `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
 | `closed` | the drawer's label | `'Closed:'` |
-| `drawer` | an element to list the closed panes in instead of a row above the layout, such as a phone's side menu | `null` |
+| `drawer` | where the closed panes are listed: a row above the layout (`null`), an element of yours such as a side menu, or nowhere (`false`) | `null` |
 | `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
 | `version` | which version of your layouts this is; a layout kept under another is not read back | — |
 | `later` | `(id)` — whether a pane not here yet will be added, so a kept layout keeps its place | none will |
@@ -202,6 +202,42 @@ toolbar) are the usual changes, with a `reset` button, since there is no
 runs there too. `lone: false` goes further and takes the strip off *any*
 pane moved into a leaf of its own, which leaves it no tab to drag or
 close by.
+
+The row of closed panes above the layout is height a phone's layout
+wants too. `drawer` puts the list somewhere else: in an element of yours,
+such as a side menu, where it is added while the tiler is on and taken
+out when it goes off, and nothing else in the element is touched. To
+place it among your own items, give it a box of its own in the menu:
+
+```html
+<nav id="menu">
+  <div id="menu-panes"></div>          <!-- drawer: this -->
+  <button id="settings">Settings</button>
+</nav>
+```
+
+Or `drawer: false` draws no list at all, and the menu is entirely yours:
+`panes()` says every pane and where it is, `present(id)` brings one to
+the front or out of the drawer, and `onShow` and `onLayout` between them
+hear every change a person makes to either. That is also the way to list
+every pane in a phone's menu, not only the closed ones, since going to a
+pane matters there as much as reopening one:
+
+```js
+const menu = () => list.replaceChildren(...panes.panes().map((p) => {
+  const item = document.createElement('button');
+
+  item.textContent = titles[p.id];
+  item.classList.toggle('open', p.where === 'front');
+  item.onclick = () => panes.present(p.id);
+
+  return item;
+}));
+```
+
+With no drawer, a tab cannot be dragged there to close it; its cross and
+`Alt W` still do, and a `reset` button with no tab strip to sit in is not
+drawn — `reset()` is for a menu of your own.
 
 A layout is kept in `localStorage` under the store and the mode. A page
 with accounts keeps it on a server instead: `storage` takes the same three

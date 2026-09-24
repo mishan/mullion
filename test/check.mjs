@@ -1592,7 +1592,13 @@ try
     {
         const root = document.querySelector('.panesroot');
         const menu = document.createElement('nav');
+        const settings = document.createElement('button');
 
+        /* The page's own item in its menu, which the list goes beside
+           and never touches. */
+        settings.id = 'menu-settings';
+        settings.textContent = 'Settings';
+        menu.append(settings);
         document.body.append(menu);
         window.phonePanes.destroy();
         window.phoneKept.clear();
@@ -1615,6 +1621,7 @@ try
             .map((b) => b.id.replace(/^panereopen-/, ''));
         const inRoot = root.querySelector('.panedrawer') !== null;
         const label = menu.querySelector('.panedrawerlabel')?.textContent;
+        const beside = menu.firstElementChild === settings;
 
         document.getElementById('panereopen-ph-b').click();
 
@@ -1653,13 +1660,78 @@ try
 
         window.phonePanes.destroy();
 
-        const gone = menu.childElementCount === 0;
+        const gone = menu.childElementCount === 1 &&
+                     menu.firstElementChild === settings;
 
         menu.remove();
 
-        return { listed: listed.join(' '), inRoot, label, back, empty,
-                 gone, toButton: toButton === `panereopen-${first}`,
-                 toTab };
+        /* And no drawer at all: the page lists its panes itself, from
+           panes() and present(), with its own items beside them. */
+        const own = document.createElement('nav');
+
+        own.innerHTML = '<ul id="own-list"></ul>' +
+                        '<button id="own-settings">Settings</button>';
+        document.body.append(own);
+
+        const list = () =>
+            document.getElementById('own-list')?.replaceChildren(
+                ...window.phonePanes.panes().map((p) =>
+                {
+                    const li = document.createElement('li');
+                    const b = document.createElement('button');
+
+                    b.id = `own-${p.id}`;
+                    b.textContent = `${p.id} ${p.where}`;
+                    b.addEventListener('click',
+                                       () => window.phonePanes.present(p.id));
+                    li.append(b);
+
+                    return li;
+                }));
+
+        window.phonePanes = createPanesAgain({
+            root,
+            catalog: ['ph-a', 'ph-b', 'ph-c'],
+            mode: 'm',
+            layouts: { m: { tabs: ['ph-a', 'ph-b', 'ph-c'] } },
+            on: true, media: 'all', param: 'phone', lone: ['ph-a'],
+            reset: '\u21ba', drawer: false,
+            storage: { getItem: () => null, setItem: () => {},
+                       removeItem: () => {} },
+            onShow: () => queueMicrotask(list),
+            onLayout: () => queueMicrotask(list),
+        });
+
+        window.phonePanes.close('ph-b');
+        list();
+
+        const none = document.querySelector('.panedrawer') === null;
+        const said = document.getElementById('own-ph-b').textContent;
+
+        document.getElementById('own-ph-b').click();
+        list();
+
+        const reopened = document.getElementById('own-ph-b').textContent;
+
+        /* Closed by its cross with no drawer to hold its button: the
+           keyboard goes to a tab in the layout. */
+        const lost = press();
+        const toTabNone = document.activeElement.id;
+
+        window.phonePanes.present(lost);
+
+        /* With every leaf bare there is no strip for the reset button
+           either, and no drawer to put it in: the page has reset(). */
+        window.phonePanes.setLayout({ tabs: ['ph-a'] });
+
+        const noReset = document.querySelector('.panereset') === null;
+
+        window.phonePanes.destroy();
+        own.remove();
+
+        return { listed: listed.join(' '), inRoot, label, beside, back,
+                 empty, gone, toButton: toButton === `panereopen-${first}`,
+                 toTab, none, said, reopened, toTabNone, noReset };
     });
 
     check(shelved.listed === 'ph-b ph-e' && !shelved.inRoot &&
@@ -1678,7 +1750,22 @@ try
           'and, with that element shut, on a tab in the layout: ' +
           (shelved.toTab || 'the body'));
 
-    check(shelved.gone, 'and the list leaves with the tiler');
+    check(shelved.beside && shelved.gone,
+          'and the list leaves with the tiler, and the page\'s own items ' +
+          'in the element are where they were');
+
+    check(shelved.none && shelved.said === 'ph-b drawer' &&
+          shelved.reopened === 'ph-b front',
+          'drawer: false draws no list, and a page lists its closed panes ' +
+          'from panes() and brings them back with present(): ' +
+          `${shelved.said}, ${shelved.reopened}`);
+
+    check(shelved.noReset,
+          'and with no strip to sit in, the reset button is not drawn');
+
+    check(shelved.toTabNone.startsWith('panetab-'),
+          'and closed by its cross with no drawer, the focus goes to a ' +
+          `tab in the layout: ${shelved.toTabNone || 'the body'}`);
 
     await touch.close();
     }

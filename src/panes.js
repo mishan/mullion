@@ -2172,6 +2172,12 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (strip !== undefined)
             strip.append(again$);
+        else if (shelf === false)
+        {
+            /* No strip and no drawer to sit in: a page that draws no
+               drawer has its own menu, and reset() is for that. */
+            again$.remove();
+        }
         else
         {
             tray.append(again$);
@@ -2189,7 +2195,12 @@ export function createPanes ({ root, catalog, layouts, mode,
        a phone's side menu, where the row above the layout was height the
        layout wanted. The same element and the same buttons, drawn into
        the page's box rather than the root, and taken out of it with the
-       tiler. */
+       tiler -- and nothing else in that box touched, since the rest of a
+       menu is the page's: its settings, its account, its links.
+
+       Or nowhere, for `drawer: false': a page that lists its panes itself,
+       from panes() and present(), with whatever else it wants beside
+       them. */
     const tray = el('panedrawer');
 
     const drawerOf = (out) =>
@@ -2395,10 +2406,15 @@ export function createPanes ({ root, catalog, layouts, mode,
            moves should be what moved, and an element appended to a
            detached parent has moved whether anything asked it to or
            not. */
-        drawerOf(out);
+        if (shelf === false)
+            tray.remove();
+        else
+        {
+            drawerOf(out);
 
-        if (shelf !== null && tray.parentElement !== shelf)
-            shelf.append(tray);
+            if (shelf !== null && tray.parentElement !== shelf)
+                shelf.append(tray);
+        }
 
         arrange(root, shelf === null ? [tray, made, keep] : [made, keep]);
 
