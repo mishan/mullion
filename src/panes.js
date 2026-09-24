@@ -178,6 +178,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                                storage = KEEP, keys = {},
                                strip = 'shrink', lone = true,
                                closed: label = 'Closed:',
+                               drawer: shelf = null,
                                reset: again = null,
                                onLayout = () => {}, version,
                                later = () => false, onDiscard = null })
@@ -2171,7 +2172,13 @@ export function createPanes ({ root, catalog, layouts, mode,
        from being put back, into the leaf they left or -- where that leaf
        closed with them -- whichever one was last touched. Nothing here
        is a pane that has gone; a drawer is what makes closing one
-       something other than losing it. */
+       something other than losing it.
+     *
+       Or listed in `drawer', an element of the page's, when it has one:
+       a phone's side menu, where the row above the layout was height the
+       layout wanted. The same element and the same buttons, drawn into
+       the page's box rather than the root, and taken out of it with the
+       tiler. */
     const tray = el('panedrawer');
 
     const drawerOf = (out) =>
@@ -2315,6 +2322,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             seen = new Map();
             hint = null;
             root.replaceChildren();
+            tray.remove();
             root.classList.remove('panezoom');
             settle();
 
@@ -2376,7 +2384,12 @@ export function createPanes ({ root, catalog, layouts, mode,
            moves should be what moved, and an element appended to a
            detached parent has moved whether anything asked it to or
            not. */
-        arrange(root, [drawerOf(out), made, keep]);
+        drawerOf(out);
+
+        if (shelf !== null && tray.parentElement !== shelf)
+            shelf.append(tray);
+
+        arrange(root, shelf === null ? [tray, made, keep] : [made, keep]);
 
         if (some)
             fill(tree);

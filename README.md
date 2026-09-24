@@ -166,6 +166,7 @@ Everything below is a default rather than a rule.
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
 | `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
 | `closed` | the drawer's label | `'Closed:'` |
+| `drawer` | an element to list the closed panes in instead of a row above the layout, such as a phone's side menu | `null` |
 | `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
 | `version` | which version of your layouts this is; a layout kept under another is not read back | — |
 | `later` | `(id)` — whether a pane not here yet will be added, so a kept layout keeps its place | none will |

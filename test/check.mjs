@@ -1584,6 +1584,64 @@ try
           'and the button puts the mode\'s layout back, closed panes and ' +
           'all');
 
+    /* And the drawer somewhere else: a phone's side menu, where a row
+       above the layout is height the layout wanted. The list is the
+       page's element's while tiled, works from there, and leaves with
+       the tiler. */
+    const shelved = await phone.evaluate(() =>
+    {
+        const root = document.querySelector('.panesroot');
+        const menu = document.createElement('nav');
+
+        document.body.append(menu);
+        window.phonePanes.destroy();
+        window.phoneKept.clear();
+
+        window.phonePanes = createPanesAgain({
+            root,
+            catalog: ['ph-a', 'ph-b', 'ph-c', 'ph-d', 'ph-e'],
+            mode: 'm',
+            layouts: { m: { tabs: ['ph-a', 'ph-b', 'ph-c', 'ph-d'] } },
+            on: true, media: 'all', param: 'phone', closed: 'Closed panes',
+            drawer: menu,
+            storage: { getItem: (k) => window.phoneKept.get(k) ?? null,
+                       setItem: (k, v) => window.phoneKept.set(k, v),
+                       removeItem: (k) => window.phoneKept.delete(k) },
+        });
+
+        window.phonePanes.close('ph-b');
+
+        const listed = [...menu.querySelectorAll('.panedrawer .paneclosed')]
+            .map((b) => b.id.replace(/^panereopen-/, ''));
+        const inRoot = root.querySelector('.panedrawer') !== null;
+        const label = menu.querySelector('.panedrawerlabel')?.textContent;
+
+        document.getElementById('panereopen-ph-b').click();
+
+        const back = JSON.stringify(window.phonePanes.layout())
+                         .includes('ph-b');
+        const empty = menu.querySelector('#panereopen-ph-b') === null;
+
+        window.phonePanes.destroy();
+
+        const gone = menu.childElementCount === 0;
+
+        menu.remove();
+
+        return { listed: listed.join(' '), inRoot, label, back, empty,
+                 gone };
+    });
+
+    check(shelved.listed === 'ph-b ph-e' && !shelved.inRoot &&
+          shelved.label === 'Closed panes',
+          'drawer lists the closed panes in the page\'s element, and none ' +
+          `above the layout: ${shelved.listed}`);
+
+    check(shelved.back && shelved.empty,
+          'and a pane is brought back from there, and off the list');
+
+    check(shelved.gone, 'and the list leaves with the tiler');
+
     await touch.close();
     }
 

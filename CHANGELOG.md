@@ -54,6 +54,9 @@ runs in Firefox and WebKit as well as Chromium.
   preset, a link or an undo.
 - **`reset()`**, and the **`reset`** option: a button that starts the
   layout over, for a screen with no `Alt 0` to press.
+- **`drawer`**: an element of the page's to list the closed panes in,
+  such as a phone's side menu, instead of a row above the layout. The
+  list is appended to it while tiled and taken out when the tiler is off.
 - **Tabs can be reordered**: a tab let go over a tab strip goes between
   the two tabs either side of the pointer, marked with a line while it is
   dragged.
