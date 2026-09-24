@@ -2996,7 +2996,17 @@ export function createPanes ({ root, catalog, layouts, mode,
                 (p.host?.contains(at) || at.id === `panetab-${id}` ||
                  at.id === `paneshut-${id}`);
 
-            if (held)
+            /* A pane `later' says will come back keeps its place, not
+               drawn, as a place kept for it on a load is -- and what was
+               in front of its leaf stays in front. A component unmounted
+               and mounted again, which is what a framework's strict mode
+               and a hidden subtree both do, is the same pane coming back,
+               and should find its place where it left it. */
+            const coming = held && later(id);
+            const front = coming ? liveTabs(leaf)[leaf.active ?? 0]
+                                 : undefined;
+
+            if (held && !coming)
                 drawer(id);
 
             home.delete(id);
@@ -3014,6 +3024,9 @@ export function createPanes ({ root, catalog, layouts, mode,
             shown.delete(id);
             restore(p);
             panes.delete(id);
+
+            if (coming && front !== undefined && front !== id)
+                leaf.active = liveTabs(leaf).indexOf(front);
 
             /* The page's doing, as `add' is. */
             if (held)

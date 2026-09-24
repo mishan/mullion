@@ -2269,12 +2269,16 @@ try
         document.body.append(root, home);
         home.append(box('ad-a'), box('ad-b'));
 
+        /* Which panes the page says will come back, which it changes
+           its mind about below. */
+        window.adLater = (id) => id.startsWith('ad-f');
+
         const make = (storage) => createPanes({
             root, catalog: ['ad-a', 'ad-b'], mode: 'm',
             layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
                 { tabs: ['ad-a'] }, { tabs: ['ad-b'] }] } },
             on: true, media: 'all', param: 'grown',
-            later: (id) => id.startsWith('ad-f'),
+            later: (id) => window.adLater(id),
             storage: storage ?? {
                 getItem: (k) => kept.get(k) ?? null,
                 setItem: (k, v) => kept.set(k, v),
@@ -2355,8 +2359,33 @@ try
         const afterReset = leaves();
         const inDrawer = root.querySelector('#panereopen-ad-f1') !== null;
 
-        /* And taken away: the element back where it was, told it has left
-           the screen, the layout without it. */
+        /* Taken away while the page says it will come back -- a
+           component unmounted and mounted again -- it keeps its place, and
+           what was in front of its leaf stays in front. */
+        panes.present('ad-f1');
+        panes.setLayout({ dir: 'row', size: [1, 1], kids: [
+            { tabs: ['ad-a', 'ad-f1'], active: 1 }, { tabs: ['ad-b'] }] });
+        panes.present('ad-a');
+
+        const toldBefore = heard.length;
+
+        panes.remove('ad-f1');
+
+        const placeKept = {
+            layout: JSON.stringify(panes.layout()),
+            drawn: leaves(),
+            heard: heard.length - toldBefore,
+        };
+
+        /* Handed back to where it was in the document, and added again
+           from there. */
+        panes.add('ad-f1', { focus: false });
+
+        const cameBack = leaves();
+
+        /* And taken away when it will not: the element back where it
+           was, told it has left the screen, the layout without it. */
+        window.adLater = () => false;
         panes.present('ad-f1');
         shows.length = 0;
 
@@ -2385,7 +2414,8 @@ try
         home.remove();
         void stray;
 
-        return { refused, added, beside, focused, shownNow, heardAdd,
+        return { placeKept, cameBack, refused, added, beside, focused, shownNow,
+                 heardAdd,
                  waiting, back, kept3, early, late, afterReset, inDrawer,
                  handed, readded, whole };
     });
@@ -2422,6 +2452,17 @@ try
           !grown.handed.visible,
           'remove hands the element back where it was, off the screen, ' +
           `out of the layout and the drawer: ${JSON.stringify(grown.handed)}`);
+
+    check(grown.placeKept.layout ===
+              '{"dir":"row","size":[1,1],"kids":[{"tabs":["ad-a","ad-f1"],' +
+              '"active":0},{"tabs":["ad-b"],"active":0}]}' &&
+          JSON.stringify(grown.placeKept.drawn) === '[["ad-a"],["ad-b"]]' &&
+          grown.placeKept.heard === 0 &&
+          JSON.stringify(grown.cameBack) === '[["ad-a","ad-f1"],["ad-b"]]',
+          'removed while later() says it will come back, a pane keeps its ' +
+          'place, not drawn, and comes back to it behind what was in ' +
+          `front: ${grown.placeKept.layout} ` +
+          JSON.stringify(grown.cameBack));
 
     check(grown.readded && grown.whole,
           'and the same id can be added again, and destroy() hands back ' +

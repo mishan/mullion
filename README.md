@@ -310,7 +310,8 @@ no cross, and `Alt W` does nothing. Nothing here ends a pane on its own.
 close takes it, `onShow` hears it go, and its element is put back where
 it was in the document and returned — while tiled that is back in the
 body, so a page that is done with it removes it in the same breath, as
-above. The same id can be added again.
+above. The same id can be added again — and a pane `later` says will
+come back keeps its place while it is gone, so it comes back to it.
 
 `panes()` lists every pane with its `kind`, `where` it is (`front`,
 `behind`, `drawer`, `off`, or `document` when untiled) and whether it is
@@ -328,13 +329,90 @@ createPanes({ /* … */ later: (id) => openFiles.has(id) });
 
 and their places are kept, not drawn, until they are added. It is asked
 again whenever the layout is kept, so a `later` that says what really
-exists lets go of the place for a file that has since been deleted.
+exists lets go of the place for a file that has since been deleted. And
+it is asked when a pane is removed: one that will come back keeps its
+place, which is what a component unmounted and mounted again needs (see
+[Frameworks](#frameworks)).
 
 `destroy()` is the way back out: every pane under its own parent again,
 every listener off the window, and the page as it was found. A page that
 mounts this into something it later unmounts needs it, and so does anyone
 calling `createPanes` a second time over the same document — two tilers
 answer the same chord twice.
+
+## Frameworks
+
+mullion moves elements, and React and Vue each expect the elements they
+render to stay where they put them. Let a framework render the
+`data-pane` elements themselves, as ordinary children, and it breaks as
+soon as it changes that list: React throws on inserting beside a moved
+pane or removing one, and takes the app down with it; Vue loses a pane it
+removes, which stays on the screen. With React, events in a pane mullion
+has moved outside React's own container stop reaching React at all.
+
+So the rule is that the framework never owns the element mullion moves.
+Two ways to keep it, both tested with React 19 and Vue 3.5.
+
+**The page owns the panes, and the framework renders into them.** The
+`data-pane` elements are the page's markup, or made by the page, and a
+portal (React) or `<Teleport>` (Vue) draws inside each. Nothing the
+framework does can reach the element mullion moves:
+
+```jsx
+const panes = createPanes({ root, catalog: ['editor', 'console'], mode });
+
+function App () {
+  return ['editor', 'console'].map((id) =>
+    createPortal(<PaneBody id={id} />, document.getElementById(id), id));
+}
+```
+
+```js
+// Vue: one Teleport per pane
+h(Teleport, { key: id, to: document.getElementById(id) }, h(PaneBody, { id }))
+```
+
+A pane opened later is an element made first, then `add`ed, then drawn
+into; closing it is its portal going and `remove(id)?.remove()`.
+
+**The framework renders each pane inside a box of its own**, which it
+keeps, and hands the pane over when it mounts and takes it back before
+it unmounts. The box never moves, so the framework's own inserts and
+removals find it where they left it:
+
+```jsx
+function Pane ({ id, children }) {
+  const panes = useContext(Tiler);   // the handle, made by a parent
+
+  // A layout effect, so the pane is back in its box before React takes
+  // the box out.
+  useLayoutEffect(() => {
+    panes.add(id, { keep: true, focus: false });
+    return () => panes.remove(id);
+  }, [panes, id]);
+
+  return (
+    <div>
+      <section id={id} data-pane="" data-pane-title={id}>{children}</section>
+    </div>
+  );
+}
+```
+
+The parent makes the tiler with `catalog: []`, since the panes arrive as
+components, and with a `later` that says yes to every pane the layouts
+name — so the default's places are kept for them, and so a pane unmounted
+and mounted again comes back to its place. React's `StrictMode` and a
+hidden `<Activity>` both do that.
+
+In Vue the same is a component with `onMounted` calling `add` and
+`onBeforeUnmount` calling `remove`. Under `<KeepAlive>`, which puts a
+component away without unmounting it, `onDeactivated` has to `remove` it
+and `onActivated` `add` it again; without them the pane stays on the
+screen while Vue thinks it is gone.
+
+`onShow` goes into either framework as state: a store read with
+`useSyncExternalStore` in React, a `reactive` object in Vue.
 
 ## Styling
 
