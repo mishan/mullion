@@ -299,15 +299,69 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
     }
 
+    /* How far outside the window a pane in the document still counts as
+       on the screen: close enough that scrolling to it finds it already
+       drawn rather than starting to. */
+    const NEAR = 100;
+
+    /* id -> whether that pane is on the screen in the document, as the
+       browser last said. Not there is not asked yet, and then the pane's
+       box is measured instead: saying yes until the browser gets round to
+       answering is telling a pane below the fold to start, and then to
+       stop again. */
+    const inView = new Map();
+
+    const near = (el) =>
+    {
+        const r = el.getBoundingClientRect();
+
+        return r.bottom >= -NEAR && r.top <= innerHeight + NEAR &&
+               r.right >= -NEAR && r.left <= innerWidth + NEAR;
+    };
+
+    /* The document is a scroll, and a pane scrolled out of it is as out
+       of sight as one behind a tab. Watched only while there is no
+       layout: a tiled pane is on the screen if it is in front, which the
+       render already knows. */
+    const sight = typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver((changes) =>
+          {
+              for (const e of changes)
+                  inView.set(e.target.id, e.isIntersecting);
+
+              settle();
+          }, { rootMargin: `${NEAR}px` })
+        : null;
+
+    let watching = false;
+
+    const watch = (on) =>
+    {
+        if (sight === null || on === watching)
+            return;
+
+        watching = on;
+        inView.clear();
+        sight.disconnect();
+
+        if (on)
+            for (const p of panes.values())
+                sight.observe(p.el);
+    };
+
     /* Whether a pane's work is worth doing.
      *
-     * Three ways for the answer to be no and one thing done about all
-     * three: the mode it belongs to is not up (the attribute available()
-     * sets), it is folded away, or -- once there is a layout to be out
-     * of -- it is not in it. */
+     * Four ways for the answer to be no and one thing done about all of
+     * them: the mode it belongs to is not up (the attribute available()
+     * sets), the window is not being looked at (another browser tab, a
+     * minimized window), and then either it is folded away or scrolled
+     * out of the document, or -- once there is a layout to be out of --
+     * it is not in front in it. */
     const visible = (p) =>
-        !off(p.el) &&
-        (tiled ? onScreen.has(p.id) : p.summary === null || p.el.open);
+        !off(p.el) && !document.hidden &&
+        (tiled ? onScreen.has(p.id)
+               : (p.summary === null || p.el.open) &&
+                 (inView.get(p.id) ?? near(p.el)));
 
     /* Whether a pane is in play at all: this page has it and the mode it
        belongs to is up. Everything the layout does is over these. */
@@ -1741,6 +1795,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         const tab = was instanceof Element &&
                     was.classList.contains('panetab') ? was.id : null;
 
+        watch(!tiled && !dead);
+
         if (!tiled)
         {
             for (const p of panes.values())
@@ -2072,6 +2128,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     };
 
     window.addEventListener('keydown', command);
+    document.addEventListener('visibilitychange', settle);
 
     const apply = () =>
     {
@@ -2344,6 +2401,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             dead = true;
             window.removeEventListener('keydown', command);
+            document.removeEventListener('visibilitychange', settle);
             screen.removeEventListener('change', apply);
 
             for (const p of panes.values())

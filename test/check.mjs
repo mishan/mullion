@@ -1949,6 +1949,98 @@ try
     await own.evaluate(() => window.stripPanes.destroy());
     await own.close();
     }
+
+    /* ---- nobody looking ----
+     *
+     * The untiled page is a scroll, and a pane scrolled out of it is as
+     * out of sight as one behind a tab; a window in the background is
+     * out of sight whatever is in it. onShow says so in both, and says
+     * it from the start rather than yes and then no.
+     */
+    {
+    const own = await browser.newPage({ viewport: NARROW });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    const looked = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const told = [];
+        const root = document.createElement('div');
+
+        document.body.replaceChildren(root);
+        window.scrollTo(0, 0);
+
+        for (const id of ['ns-top', 'ns-low'])
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.style.height = '1500px';
+            document.body.append(el);
+        }
+
+        const panes = createPanes({
+            root, catalog: ['ns-top', 'ns-low'], mode: 'm',
+            on: false, param: 'unseen',
+            storage: { getItem: () => null, setItem: () => {},
+                       removeItem: () => {} },
+            onShow: (id, on) => told.push(`${id} ${on}`),
+        });
+
+        const first = [...told];
+
+        await wait(200);
+
+        const settled = told.length === first.length;
+
+        window.scrollTo(0, 1800);
+        await wait(300);
+
+        const scrolled = told.slice(first.length);
+        const asked = [panes.visible('ns-top'), panes.visible('ns-low')];
+
+        /* The window put behind another. */
+        const was = told.length;
+
+        Object.defineProperty(document, 'hidden',
+                              { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        const away = told.slice(was);
+
+        delete document.hidden;
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        const back = told.slice(was + away.length);
+
+        panes.destroy();
+
+        return { first, settled, scrolled, asked, away, back };
+    });
+
+    check(JSON.stringify(looked.first) ===
+              '["ns-top true","ns-low false"]' && looked.settled,
+          'untiled, a pane below the fold is told it is out of sight from ' +
+          `the start, and not told otherwise first: ${looked.first}`);
+
+    check(JSON.stringify(looked.scrolled) ===
+              '["ns-top false","ns-low true"]' &&
+          !looked.asked[0] && looked.asked[1],
+          'and scrolled to, the two change places: ' +
+          `${looked.scrolled}`);
+
+    check(JSON.stringify(looked.away) === '["ns-low false"]' &&
+          JSON.stringify(looked.back) === '["ns-low true"]',
+          'and a window in the background has nothing on the screen: ' +
+          `${looked.away} then ${looked.back}`);
+
+    await own.close();
+    }
 }
 catch (e)
 {
