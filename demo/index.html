@@ -46,6 +46,17 @@
   <a class="to-plain" href="?panes=0" title="The same page, with the tiler off">Plain page</a>
   <a class="to-tiled" href="./">Tiled</a>
   <a class="to-github" href="https://github.com/mishan/mullion">GitHub</a>
+
+  <!-- A phone's menu, for ?touch: the closed panes are listed here, with
+       mullion's `drawer' option, instead of in a row above the layout
+       that a phone's panes want the height of. -->
+  <button type="button" id="menu-button" class="menu-button"
+          aria-expanded="false" aria-controls="menu" aria-label="Menu">☰<span id="menu-count" class="menu-count" hidden></span></button>
+  <nav id="menu" class="menu" hidden aria-label="Menu">
+    <div id="menu-panes"></div>
+    <a class="to-plain" href="?panes=0">Plain page</a>
+    <a href="https://github.com/mishan/mullion">GitHub</a>
+  </nav>
 </header>
 
 <p class="plain-note">

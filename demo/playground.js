@@ -709,6 +709,23 @@ $('undo').addEventListener('click', () =>
     $('undo').disabled = steps.length === 0;
 });
 
+/* On a phone, how many panes are closed, on the menu's button: the list
+   of them is in the menu now, and a menu nobody knows has something in
+   it is a list nobody finds. */
+const tally$ = () =>
+{
+    if (!TOUCH || panes === null)
+        return;
+
+    const n = panes.panes().filter((p) => p.where === 'drawer').length;
+    const count = $('menu-count');
+
+    count.hidden = n === 0;
+    count.textContent = n;
+    $('menu-button').setAttribute('aria-label',
+                                  n === 0 ? 'Menu' : `Menu, ${n} closed`);
+};
+
 /* Null until createPanes returns: onShow is told about the first panes
    on the screen from inside it. */
 let panes = null;
@@ -739,6 +756,8 @@ panes = createPanes({
         media: '(min-width: 20em)',
         strip: 'scroll',
         split: 18,
+        drawer: $('menu-panes'),
+        closed: 'Closed panes',
     }),
     onShow: (id, on) =>
     {
@@ -748,10 +767,13 @@ panes = createPanes({
         {
             status();
             marks();
+            tally$();
         }
     },
     onLayout: (layout) =>
     {
+        tally$();
+
         if (!undoing && now !== null)
         {
             steps.push(now);
@@ -837,6 +859,48 @@ if (TOUCH)
         fit();
 
     document.documentElement.classList.add('touch');
+
+    /* The menu: opened by its button, and shut again by the button, by
+       Escape, by a press anywhere outside it, or by a pane brought back
+       from it -- which is what it was opened for. */
+    const menu = $('menu');
+    const button = $('menu-button');
+
+    const shut = () =>
+    {
+        menu.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+    };
+
+    button.addEventListener('click', () =>
+    {
+        menu.hidden = !menu.hidden;
+        button.setAttribute('aria-expanded', String(!menu.hidden));
+    });
+
+    $('menu-panes').addEventListener('click', (e) =>
+    {
+        if (e.target.closest('.paneclosed') !== null)
+            shut();
+    });
+
+    addEventListener('pointerdown', (e) =>
+    {
+        if (!menu.hidden && !menu.contains(e.target) &&
+            !button.contains(e.target))
+            shut();
+    });
+
+    addEventListener('keydown', (e) =>
+    {
+        if (e.key === 'Escape' && !menu.hidden)
+        {
+            shut();
+            button.focus();
+        }
+    });
+
+    tally$();
 
     /* And the way to the plain page and back keeps the phone's set. */
     for (const a of document.querySelectorAll('.to-plain'))
