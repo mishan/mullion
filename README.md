@@ -8,7 +8,7 @@ A mullion is the bar that divides a window into panes. This is that, for
 the web: splits, dividers, tabs, a drawer and key bindings, over a document
 somebody else wrote.
 
-![A tab dragged onto a pane to stack it, onto an edge to split, and onto the drawer to close it](https://raw.githubusercontent.com/mishan/mullion/main/demo/mullion.gif)
+![The playground: an edit that reruns the preview; the Console stacked over the Preview, which stops drawing as the Activity chart shows; a pane closed to the drawer and another split out of it; a zoom; and a switch of layouts](https://raw.githubusercontent.com/mishan/mullion/main/demo/mullion.gif)
 
 **[Try it](https://mishan.github.io/mullion/)** — a small code playground,
 tiled, on a window wider than 60em; on anything narrower, the same page
@@ -380,7 +380,7 @@ npm test              # the fixture, in Chromium
 npm test -- firefox   # or webkit
 npm run test:demo     # the playground still works
 npm run types         # the declarations, which are hand-written
-npm run shot          # the gif above, re-recorded (needs ffmpeg)
+npm run shot          # the gif above and the demo's link preview, re-recorded (needs ffmpeg)
 ```
 
 ## License

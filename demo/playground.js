@@ -54,7 +54,40 @@ const LAYOUTS = {
     },
 };
 
+/*
+ * And a set for a phone, which is asked for (`?touch'): on a narrow
+ * screen the plain page is the page, and tiling there is something to
+ * try rather than something to be handed. Two panes to a screen, one
+ * shape upright and another on its side, and the rest a tab away.
+ */
+const TOUCH = new URLSearchParams(location.search).has('touch');
+
+const UPRIGHT = {
+    write: {
+        dir: 'col', size: [0.5, 0.5], kids: [
+            { tabs: ['ed-js', 'ed-html', 'ed-css'] },
+            { tabs: ['preview', 'console', 'activity'] }],
+    },
+    debug: {
+        dir: 'col', size: [0.45, 0.55], kids: [
+            { tabs: ['preview'] },
+            { tabs: ['console', 'activity', 'ed-js', 'ed-html', 'ed-css'] }],
+    },
+};
+
+const SIDEWAYS = {
+    write: { ...UPRIGHT.write, dir: 'row' },
+    debug: { ...UPRIGHT.debug, dir: 'row', size: [0.5, 0.5] },
+};
+
+const side = matchMedia('(orientation: landscape)');
+
 const KEPT = 'mullion-playground';
+
+/* Where a layout is kept: one store per shape of screen, so that turning
+   a phone over and back finds each the way it was left. */
+const store = () =>
+    !TOUCH ? KEPT : `${KEPT}:${side.matches ? 'side' : 'up'}`;
 
 const kept = (key, fallback) =>
 {
@@ -256,7 +289,7 @@ const say = (level, text, line) =>
         const time = document.createElement('time');
         const body = document.createElement('span');
 
-        li.className = level;
+        li.className = `lv-${level}`;
         li.dataset.level = level;
         li.dataset.text = text;
         li.dataset.n = 1;
@@ -314,20 +347,16 @@ const empty = () =>
 $('clear').addEventListener('click', empty);
 empty();
 
-frame.addEventListener('load', () =>
-{
-    if (frame.srcdoc !== '')
-        say('sys', 'Preview loaded');
-
-    tell(frame, onScreen.get('preview'));
-});
+frame.addEventListener('load', () => tell(frame, onScreen.get('preview')));
 
 addEventListener('message', (e) =>
 {
     if (e.source !== frame.contentWindow || e.data?.playground !== 1)
         return;
 
-    if (e.data.kind === 'log')
+    if (e.data.kind === 'start')
+        say('sys', 'Preview started');
+    else if (e.data.kind === 'log')
         say(e.data.level === 'info' || e.data.level === 'debug'
                 ? 'log' : e.data.level,
             e.data.text, e.data.line);
@@ -480,6 +509,34 @@ const shown = (id, on) =>
 /* A note that the layout was kept, which fades. */
 let fading = 0;
 
+/* Every layout a person left, for an undo: onLayout says what each
+   change came to, and setLayout puts an old one back. A mode or a
+   screen of another shape is a history of its own, so either starts it
+   over. */
+const steps = [];
+let now = null;
+let undoing = false;
+
+const forget = () =>
+{
+    steps.length = 0;
+    now = panes.layout();
+    $('undo').disabled = true;
+};
+
+$('undo').addEventListener('click', () =>
+{
+    const back = steps.pop();
+
+    if (back === undefined)
+        return;
+
+    undoing = true;
+    panes.setLayout(back);
+    undoing = false;
+    $('undo').disabled = steps.length === 0;
+});
+
 /* Null until createPanes returns: onShow is told about the first panes
    on the screen from inside it. */
 let panes = null;
@@ -487,11 +544,17 @@ let panes = null;
 panes = createPanes({
     root: $('root'),
     catalog: CATALOG,
-    layouts: LAYOUTS,
+    layouts: !TOUCH ? LAYOUTS : side.matches ? SIDEWAYS : UPRIGHT,
     mode,
-    store: KEPT,
+    store: store(),
     on: true,
     reset: '↺',
+    version: 1,
+    ...(TOUCH && {
+        media: '(min-width: 20em)',
+        strip: 'scroll',
+        split: 18,
+    }),
     onShow: (id, on) =>
     {
         shown(id, on);
@@ -502,8 +565,19 @@ panes = createPanes({
             marks();
         }
     },
-    onLayout: () =>
+    onLayout: (layout) =>
     {
+        if (!undoing && now !== null)
+        {
+            steps.push(now);
+
+            if (steps.length > 50)
+                steps.shift();
+        }
+
+        now = layout;
+        $('undo').disabled = steps.length === 0;
+
         const note = $('st-saved');
 
         note.textContent = 'Layout saved';
@@ -518,6 +592,7 @@ const pick = (name) =>
     mode = name;
     keep('mode', name);
     panes.mode(name);
+    forget();
 
     for (const b of document.querySelectorAll('[data-mode]'))
         b.setAttribute('aria-pressed', String(b.dataset.mode === name));
@@ -544,6 +619,37 @@ for (const b of document.querySelectorAll('[data-open]'))
 
         text.focus({ preventScroll: !panes.tiled() });
     });
+
+if (TOUCH)
+{
+    side.addEventListener('change', () =>
+    {
+        panes.setLayouts(side.matches ? SIDEWAYS : UPRIGHT,
+                         { store: store(), version: 1 });
+        forget();
+    });
+
+    /* The layout is as tall as what is visible, which on a phone is the
+       window less the keyboard when one is up -- and `dvh' does not know
+       about the keyboard. */
+    const fit = () =>
+        document.documentElement.style.setProperty(
+            '--pane-height', `${Math.round(visualViewport.height)}px`);
+
+    visualViewport?.addEventListener('resize', fit);
+
+    if (window.visualViewport)
+        fit();
+
+    document.documentElement.classList.add('touch');
+
+    /* And the way to the plain page and back keeps the phone's set. */
+    for (const a of document.querySelectorAll('.to-plain'))
+        a.search = '?touch&panes=0';
+
+    for (const a of document.querySelectorAll('.to-tiled, .if-forced a'))
+        a.search = '?touch';
+}
 
 if (new URLSearchParams(location.search).get('panes') === '0')
     document.documentElement.classList.add('forced');

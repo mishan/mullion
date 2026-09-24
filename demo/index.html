@@ -6,6 +6,14 @@
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="mullion, tiling a code playground: an ordinary page of sections, adopted into splits, tabs and a drawer.">
 <title>mullion · playground</title>
+<meta property="og:title" content="mullion · playground">
+<meta property="og:description" content="A tiling layout for a page you already have: splits, tabs and a drawer over an ordinary document, and work behind a tab that stops.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mishan.github.io/mullion/demo/">
+<meta property="og:image" content="https://mishan.github.io/mullion/demo/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='14' height='14' rx='3' fill='%235b63d3'/%3E%3Cpath d='M8 3v10M3 8h10' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="../src/panes.css">
 <link rel="stylesheet" href="playground.css">
@@ -34,16 +42,17 @@
 
   <span class="grow"></span>
 
+  <button type="button" id="undo" class="undo" disabled title="Put the layout back the way it was before the last change" aria-label="Undo layout">↶<span class="label"> Undo layout</span></button>
   <a class="to-plain" href="?panes=0" title="The same page, with the tiler off">Plain page</a>
   <a class="to-tiled" href="./">Tiled</a>
-  <a href="https://github.com/mishan/mullion">GitHub</a>
+  <a class="to-github" href="https://github.com/mishan/mullion">GitHub</a>
 </header>
 
 <p class="plain-note">
   This is the page mullion tiles, untiled: the same sections, in the
   order they were written.
   <span class="if-narrow">On a window wider than 60em, with a mouse,
-  they become panes.</span>
+  they become panes. Or <a href="?touch">tile them on this screen</a>.</span>
   <span class="if-forced"><a href="./">Tile it again.</a></span>
 </p>
 
@@ -194,7 +203,8 @@ requestAnimationFrame(draw);
 <details id="keys" data-pane data-pane-title="Keys" data-pane-min="220">
   <summary>Keys and gestures</summary>
   <table class="keys">
-    <tr><td>Drag a tab</td><td>onto a pane to stack, an edge to split, the drawer to close</td></tr>
+    <tr><td>Drag a tab</td><td>onto a tab strip to put it there, a pane to stack, an edge to split, the drawer to close</td></tr>
+    <tr><td><kbd>Esc</kbd> while dragging</td><td>take the drag back</td></tr>
     <tr><td>Drag a divider</td><td>or focus it and use the arrows; double-click evens it up</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>←↑→↓</kbd></td><td>focus the pane that way</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>←↑→↓</kbd></td><td>move the pane that way</td></tr>

@@ -47,6 +47,8 @@ const SHIM = (shown, js) => `
     [${JSON.stringify(js).replace(/</g, '\\u003c')}],
     { type: 'text/javascript' }));
 
+  post({ kind: 'start' });
+
   for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
     const was = console[level].bind(console);
     console[level] = (...args) => {
