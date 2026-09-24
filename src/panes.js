@@ -1816,7 +1816,18 @@ export function createPanes ({ root, catalog, layouts, mode,
         focus = leaf;
         changed();
         render();
-        find(`panereopen-${id}`)?.focus();
+
+        /* Onto its button in the drawer where the keyboard can reach one
+           -- not where the drawer is a menu of the page's that is shut,
+           and not for a pane that has no button to come back by. There,
+           onto the tab in front of what is left, as Alt W does, rather
+           than out to the top of the document. */
+        const back = tray.querySelector(`#${CSS.escape(`panereopen-${id}`)}`);
+
+        back?.focus();
+
+        if (back === null || document.activeElement !== back)
+            raiseTab(holds(leaf) ? leaf : firstLeaf());
     };
 
     /* The tab in front of a leaf, with the focus left where the person

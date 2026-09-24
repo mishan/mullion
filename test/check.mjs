@@ -1622,6 +1622,21 @@ try
                          .includes('ph-b');
         const empty = menu.querySelector('#panereopen-ph-b') === null;
 
+        /* Closed by its cross, the keyboard goes to the button that
+           brings it back -- in the menu, found there and not in the
+           root. And with the menu shut, to a tab still on the screen,
+           and not out to the top of the document. */
+        document.getElementById('paneshut-ph-a').click();
+
+        const toButton = document.activeElement.id;
+
+        menu.hidden = true;
+        document.getElementById('paneshut-ph-c').click();
+
+        const toTab = document.activeElement.id;
+
+        menu.hidden = false;
+
         window.phonePanes.destroy();
 
         const gone = menu.childElementCount === 0;
@@ -1629,7 +1644,7 @@ try
         menu.remove();
 
         return { listed: listed.join(' '), inRoot, label, back, empty,
-                 gone };
+                 gone, toButton, toTab };
     });
 
     check(shelved.listed === 'ph-b ph-e' && !shelved.inRoot &&
@@ -1639,6 +1654,14 @@ try
 
     check(shelved.back && shelved.empty,
           'and a pane is brought back from there, and off the list');
+
+    check(shelved.toButton === 'panereopen-ph-a',
+          'a pane closed by its cross leaves the focus on its button in ' +
+          `the page's element: ${shelved.toButton}`);
+
+    check(shelved.toTab.startsWith('panetab-'),
+          'and, with that element shut, on a tab in the layout: ' +
+          (shelved.toTab || 'the body'));
 
     check(shelved.gone, 'and the list leaves with the tiler');
 
