@@ -72,8 +72,14 @@
 
 /* The screen a tiled layout is worth having on. Both halves matter, and
    the second is the one that gets forgotten: a finger is not a mouse, and
-   a divider you cannot grab is worse than no divider. */
-const MEDIA = '(min-width: 60em) and (pointer: fine)';
+   a divider you cannot grab is worse than no divider.
+
+   `any-pointer' and not `pointer': a screen with a mouse or a trackpad
+   anywhere is a screen somebody can drag a divider on. A tablet with a
+   keyboard and trackpad attached calls its main pointer the finger, and
+   it has 60em and a pointer that aims -- which is everything tiling
+   asks for. */
+const MEDIA = '(min-width: 60em) and (any-pointer: fine)';
 
 /* A divider's thickness and a leaf's own floor, in CSS pixels. The first
    of these is also drawn, and the drawing reads it from the root as

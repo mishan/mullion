@@ -1191,6 +1191,27 @@ try
     check(odd.handed,
           'and destroy() hands back what the page put in the overlay');
 
+    /* ---- a screen with only a finger ----
+     *
+     * Wide enough, and with nothing to aim with but a finger: the
+     * default `media' asks for a pointer that aims anywhere on the
+     * device, and this has none, so the page stays the document.
+     */
+    {
+    const fingers = await browser.newContext({ viewport: WIDE,
+                                               hasTouch: true });
+    const tablet = await fingers.newPage();
+
+    tablet.on('pageerror', (e) => errors.push(e.message));
+    await tablet.goto(`${base}?panes=1`);
+    await tablet.waitForFunction(() => window.tiler !== undefined);
+
+    check(!await tablet.evaluate(() => window.tiler.tiled()),
+          'a wide screen with only a finger to point with is not tiled');
+
+    await fingers.close();
+    }
+
     /* ---- a phone ----
      *
      * The options for a screen the defaults were not drawn for, a second
