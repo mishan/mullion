@@ -18,7 +18,7 @@
  */
 
 import { createPanes } from 'mullion';
-import type { PaneNode, Panes, PanesOptions } from 'mullion';
+import type { PaneNode, Panes, PanesOptions, PaneState } from 'mullion';
 import { placePopover } from 'mullion/popover.js';
 
 const layout: PaneNode = {
@@ -44,6 +44,7 @@ const options: PanesOptions = {
     onLayout: (tree: PaneNode, mode: string) => { void tree; void mode; },
     version: 2,
     later: (id: string) => id.startsWith('file-'),
+    onDiscard: (id: string) => { void id; },
 };
 
 /* And a storage that answers later, which is a server. */
@@ -67,7 +68,11 @@ panes.setLayouts({ default: { tabs: ['editor'] } },
                  { store: 'side', split: 18, version: 'b' });
 
 const put: boolean = panes.setLayout(layout);
-const grew: boolean = panes.add('file-1', { near: 'editor', focus: false });
+const grew: boolean = panes.add('file-1',
+                                { near: 'editor', focus: false, keep: true });
+const states: PaneState[] = panes.panes();
+
+void states;
 const gone: HTMLElement | null = panes.remove('file-1');
 
 void grew;

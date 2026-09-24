@@ -110,6 +110,24 @@ export interface PanesOptions {
    *  `add`: its place in a kept layout is kept for it rather than dropped,
    *  and not drawn until it is added. */
   later?: (id: string) => boolean;
+  /** A person closed an ephemeral pane -- by its cross, Alt W, a drop on
+   *  the drawer -- or the page called `close` on one. Nothing has moved:
+   *  the page ends it with `remove`, now or after asking, or keeps it by
+   *  doing nothing. Without this, an ephemeral pane cannot be closed from
+   *  the layout at all. */
+  onDiscard?: (id: string) => void;
+}
+
+/** One pane, as `panes()` reports it. */
+export interface PaneState {
+  id: string;
+  /** `lasting` panes go to the drawer when closed; `ephemeral` ones are
+   *  the page's to end. */
+  kind: 'lasting' | 'ephemeral';
+  /** In front of its leaf or behind a tab in it, in the drawer, off with
+   *  its mode, or in the document when there is no layout. */
+  where: 'front' | 'behind' | 'drawer' | 'off' | 'document';
+  visible: boolean;
 }
 
 export interface PaneKeys {
@@ -152,14 +170,21 @@ export interface Panes {
    *  where it was. `focus: false` for a pane the page is raising at
    *  somebody rather than for them. */
   present(id: string, opts?: { focus?: boolean }): void;
-  /** Put a pane in the drawer. */
+  /** Put a pane in the drawer -- or, for an ephemeral one, ask the page
+   *  through `onDiscard`, as a person's close would. */
   close(id: string): void;
   /** Take on a pane the page has put into the document since: an element
    *  with this id, marked `data-pane`. Tiled, it goes where a kept layout
    *  had it, beside `near`, or where the person last was, in front and
-   *  with the focus unless `focus: false`. False for an element that is
-   *  not in the document, not marked, or already a pane. */
-  add(id: string, opts?: { near?: string; focus?: boolean }): boolean;
+   *  with the focus unless `focus: false`. Ephemeral -- a person's close
+   *  asks `onDiscard` instead of using the drawer -- unless `keep: true`.
+   *  False for an element that is not in the document, not marked, or
+   *  already a pane. */
+  add(id: string,
+      opts?: { near?: string; focus?: boolean; keep?: boolean }): boolean;
+  /** Every pane, in the order it was taken on: whether a person's close
+   *  ends it, where it is, and what onShow was last told. */
+  panes(): PaneState[];
   /** No longer a pane: out of the layout, told it has left the screen,
    *  and its element put back where it was in the document and returned,
    *  for the page to keep or delete. Null for a pane there is not. */
