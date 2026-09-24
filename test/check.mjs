@@ -1626,12 +1626,26 @@ try
            brings it back -- in the menu, found there and not in the
            root. And with the menu shut, to a tab still on the screen,
            and not out to the top of the document. */
-        document.getElementById('paneshut-ph-a').click();
+        /* The tab in front, since that is the one whose cross is on
+           the screen to be pressed. */
+        const press = () =>
+        {
+            const id = document.querySelector(
+                '.panetab[aria-selected="true"]').id.replace('panetab-', '');
+            const cross = document.getElementById(`paneshut-${id}`);
+
+            cross.focus();
+            cross.click();
+
+            return id;
+        };
+
+        const first = press();
 
         const toButton = document.activeElement.id;
 
         menu.hidden = true;
-        document.getElementById('paneshut-ph-c').click();
+        press();
 
         const toTab = document.activeElement.id;
 
@@ -1644,7 +1658,8 @@ try
         menu.remove();
 
         return { listed: listed.join(' '), inRoot, label, back, empty,
-                 gone, toButton, toTab };
+                 gone, toButton: toButton === `panereopen-${first}`,
+                 toTab };
     });
 
     check(shelved.listed === 'ph-b ph-e' && !shelved.inRoot &&
@@ -1655,9 +1670,9 @@ try
     check(shelved.back && shelved.empty,
           'and a pane is brought back from there, and off the list');
 
-    check(shelved.toButton === 'panereopen-ph-a',
+    check(shelved.toButton,
           'a pane closed by its cross leaves the focus on its button in ' +
-          `the page's element: ${shelved.toButton}`);
+          'the page\'s element');
 
     check(shelved.toTab.startsWith('panetab-'),
           'and, with that element shut, on a tab in the layout: ' +
