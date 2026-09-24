@@ -219,9 +219,11 @@ const openExtra = (id, { focus = true } = {}) =>
    tiler hands back is ours to delete. */
 const closeExtra = (id) =>
 {
+    /* No longer open first, so that `later' says it is not coming back
+       and the tiler lets go of its place. */
+    opened.delete(id);
     panes.remove(id)?.remove();
     delete redraw[id];
-    opened.delete(id);
     onScreen.delete(id);
     keepExtra();
     roster();

@@ -332,7 +332,9 @@ again whenever the layout is kept, so a `later` that says what really
 exists lets go of the place for a file that has since been deleted. And
 it is asked when a pane is removed: one that will come back keeps its
 place, which is what a component unmounted and mounted again needs (see
-[Frameworks](#frameworks)).
+[Frameworks](#frameworks)). So a page ending a pane for good says so
+first — out of `openFiles`, then `remove(id)` — or its place is kept for
+a pane that is not coming.
 
 `destroy()` is the way back out: every pane under its own parent again,
 every listener off the window, and the page as it was found. A page that
