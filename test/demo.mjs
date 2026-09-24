@@ -139,6 +139,14 @@ try
 
     /* Behind another tab: the program's frames held, not merely
        unseen. */
+    /* A layout as text, its shares to six places: a share put back is
+       worked out again, and may differ in the last digit. */
+    const shape = () => page.evaluate(() =>
+        JSON.stringify(window.playground.layout(),
+                       (k, v) => typeof v === 'number' && k !== 'active'
+                           ? Math.round(v * 1e6) / 1e6 : v));
+    const start = await shape();
+
     await page.evaluate(() => window.playground.pane('close', 'preview'));
 
     check(await until(page, () =>
@@ -153,9 +161,10 @@ try
               window.playground.samples().at(-1).fps > 10),
           'and draws again when it comes back');
 
-    /* Back from the drawer, it is a tab in the first leaf -- over the
-       Files -- so the layout starts over for what follows. */
-    await page.evaluate(() => window.playground.pane('reset'));
+    /* And where it was: a leaf of its own over the Console, not a tab
+       stacked on whatever leaf came first. */
+    check(await shape() === start,
+          'and it comes back where it was, the layout as it was');
 
     /* The chart draws only while it is in front. */
     check(!await page.evaluate(() => window.playground.drawing()),

@@ -201,37 +201,40 @@ const press = async (chord, caption) =>
     await wait(900);
 };
 
-/* An edit, typed: more of the windows lit, and the preview runs it. */
+/* An edit, typed: the lights another color, and the preview runs it.
+   A color and not more of them, since every lit window is redrawn every
+   frame and the gif pays for each one. */
 await click('#ed-js textarea', { x: 0.3, y: 0.3 });
 await page.evaluate(() =>
 {
     const area = document.querySelector('#ed-js textarea');
-    const at = area.value.indexOf('< 0.3');
+    const was = '255, 196, 92';
+    const at = area.value.indexOf(was);
 
-    area.setSelectionRange(at + 2, at + 5);
+    area.setSelectionRange(at, at + was.length);
 });
 await wait(400);
-await page.keyboard.type('0.7', { delay: 180 });
+await page.keyboard.type('120, 210, 255', { delay: 110 });
 await wait(500);
 await page.keyboard.press('Home');
-await wait(1500);
+await wait(1100);
 
 /* The Console stacked over the Preview. The Preview is behind a tab now,
    its program is held, and the Activity chart -- in front where the
    Console was -- drops to nothing. */
 await drag('#panetab-console', '#pane-preview .panebody');
-await wait(3200);
+await wait(2800);
 
 /* And raised again, and it draws again. */
 await click('#panetab-preview');
-await wait(2400);
+await wait(1900);
 
 /* The Files closed into the drawer, and the Keys out of it onto the
    bottom edge of the editor: a split. */
 await drag('#panetab-files', '.panedrawer');
 await wait(500);
 await drag('#panereopen-keys', '#pane-ed-js .panebody', { x: 0.5, y: 0.92 });
-await wait(1200);
+await wait(900);
 
 /* A divider, moved. */
 await to('#root > .panebox > .panesplit');
@@ -247,12 +250,12 @@ await wait(700);
 await click('#panetab-preview');
 await wait(300);
 await press('Alt+Enter', 'Alt  Enter — zoom');
-await wait(900);
+await wait(400);
 await press('Alt+Enter', 'Alt  Enter');
 
 /* Another mode's layout, and back. */
 await click('[data-mode="debug"]');
-await wait(1800);
+await wait(1300);
 await click('[data-mode="write"]');
 await wait(900);
 
