@@ -39,10 +39,10 @@ was handed, so nothing that found a box by name stops finding it.
 ```
 
 **Turn it off and you have your page back.** Below the threshold — a
-narrow window, or a pointer that is a finger — every element goes back
-under its own parent, folded the way it was. The untiled page is the
-fallback, not a second mobile layout, so there is one markup, one
-stylesheet and one set of tests.
+narrow window, or a screen with only a finger to point with — every
+element goes back under its own parent, folded the way it was. The
+untiled page is the fallback, not a second mobile layout, so there is one
+markup, one stylesheet and one set of tests.
 
 **A pane nobody is looking at is told so.** `onShow` is the contract, and
 it is the reason tiling can pay for itself rather than cost: two canvases
@@ -101,6 +101,11 @@ nowhere in here that makes one.
 | `Alt W` | close the pane in front |
 | `Alt 0` | forget the saved layout and start over (or the `reset` button, or `reset()`) |
 
+In a page that reads right to left, every direction is the one on the
+screen: the arrow pointing left along a strip is the next tab, a divider
+goes the way it is dragged, and a pane dropped on or moved off a left
+edge goes on the left.
+
 Every command is a chord with `Alt` in it, because wherever the bare
 letters already mean something — a text editor, a chat composer, a
 keyboard instrument — a tiler that took `W` for itself would have taken
@@ -136,7 +141,7 @@ Everything below is a default rather than a rule.
 | `on` | tile when the screen allows it | `false` |
 | `store` | localStorage key prefix; the mode is appended | `'panes'` |
 | `editing` | extra selector for "a key here is text" | — |
-| `media` | the screen worth tiling on | `(min-width: 60em) and (pointer: fine)` |
+| `media` | the screen worth tiling on | `(min-width: 60em) and (any-pointer: fine)` |
 | `split` | a divider's thickness in pixels | `6` |
 | `leaf` | a leaf's own floor in pixels | `64` |
 | `edge` | how much of a leaf's edge is an edge | `0.2` |

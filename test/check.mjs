@@ -1191,6 +1191,27 @@ try
     check(odd.handed,
           'and destroy() hands back what the page put in the overlay');
 
+    /* ---- a screen with only a finger ----
+     *
+     * Wide enough, and with nothing to aim with but a finger: the
+     * default `media' asks for a pointer that aims anywhere on the
+     * device, and this has none, so the page stays the document.
+     */
+    {
+    const fingers = await browser.newContext({ viewport: WIDE,
+                                               hasTouch: true });
+    const tablet = await fingers.newPage();
+
+    tablet.on('pageerror', (e) => errors.push(e.message));
+    await tablet.goto(`${base}?panes=1`);
+    await tablet.waitForFunction(() => window.tiler !== undefined);
+
+    check(!await tablet.evaluate(() => window.tiler.tiled()),
+          'a wide screen with only a finger to point with is not tiled');
+
+    await fingers.close();
+    }
+
     /* ---- a phone ----
      *
      * The options for a screen the defaults were not drawn for, a second
@@ -1947,6 +1968,245 @@ try
           `and nobody is told: ${JSON.stringify(escaped)}`);
 
     await own.evaluate(() => window.stripPanes.destroy());
+    await own.close();
+    }
+
+    /* ---- right to left ----
+     *
+     * A split's first child is on the right in a page that reads that
+     * way, so everything that turns a direction on the screen into a
+     * place in the tree has to know which way the page reads: the arrows
+     * along a strip, a divider dragged or moved by the keys, and a tab
+     * dropped on an edge.
+     */
+    {
+    const own = await browser.newPage({ viewport: WIDE });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const root = document.createElement('div');
+        const box = (id) =>
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.dataset.paneMin = '40';
+
+            return el;
+        };
+
+        root.dir = 'rtl';
+        Object.assign(root.style, { position: 'fixed', inset: '0',
+                                    zIndex: '10', background: 'white',
+                                    display: 'flex',
+                                    flexDirection: 'column' });
+        document.body.append(root, box('rl-a'), box('rl-b'), box('rl-e'),
+                             box('rl-c'), box('rl-d'));
+
+        window.rtlPanes = createPanes({
+            root, catalog: ['rl-a', 'rl-b', 'rl-e', 'rl-c', 'rl-d'],
+            mode: 'm', on: true, media: 'all', param: 'rtl',
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['rl-a', 'rl-b', 'rl-e'] },
+                { tabs: ['rl-c', 'rl-d'] }] } },
+            storage: { getItem: () => null, setItem: () => {},
+                       removeItem: () => {} },
+        });
+    });
+
+    const rect = (sel) => own.locator(sel).boundingBox();
+    const leafOf = (id) => `.paneleaf:has(#panetab-${id})`;
+
+    /* The first leaf is on the right. The arrow pointing left, along
+       its strip, is the next tab. */
+    const first = await rect(leafOf('rl-a'));
+    const second = await rect(leafOf('rl-c'));
+
+    await own.focus('#panetab-rl-a');
+    await own.keyboard.press('ArrowLeft');
+
+    const along = await own.evaluate(() => document.activeElement.id);
+
+    await own.keyboard.press('ArrowRight');
+
+    /* A divider dragged 100px to the right makes the right-hand leaf,
+       which is the first, 100px narrower. */
+    const bar = await rect('.panesplit');
+
+    await own.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(bar.x + bar.width / 2 + 100, bar.y + bar.height / 2,
+                         { steps: 10 });
+    await own.mouse.up();
+
+    const dragged = (await rect(leafOf('rl-a'))).width;
+
+    /* And the arrow keys on it the same way round. */
+    await own.focus('.panesplit');
+    await own.keyboard.press('ArrowLeft');
+
+    const keyed = (await rect(leafOf('rl-a'))).width;
+
+    /* A tab dropped on the left edge of the right-hand leaf lands on the
+       left of it, and is shown landing there. */
+    const tab = await rect('#panetab-rl-d');
+
+    await own.mouse.move(tab.x + tab.width / 2, tab.y + tab.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(tab.x + tab.width / 2 + 10, tab.y + tab.height / 2,
+                         { steps: 2 });
+
+    const target = await rect(leafOf('rl-a'));
+
+    await own.mouse.move(target.x + 5, target.y + target.height / 2,
+                         { steps: 10 });
+
+    const hinted = await own.evaluate(() =>
+    {
+        const h = document.querySelector('.panedrop').getBoundingClientRect();
+        const leaf = document.getElementById('panetab-rl-a')
+                             .closest('.paneleaf').getBoundingClientRect();
+
+        return { ok: Math.abs(h.left - leaf.left) <= 2 &&
+                     Math.abs(h.width - leaf.width / 2) <= 6,
+                 h: [h.left, h.width], leaf: [leaf.left, leaf.width] };
+    });
+
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    const d = await rect(leafOf('rl-d'));
+    const a = await rect(leafOf('rl-a'));
+
+    /* And a pane moved off the right edge by the keys, with nothing to
+       its right: it goes right. */
+    await own.click('#panetab-rl-a');
+    await own.keyboard.press('Alt+Shift+ArrowRight');
+    await own.waitForTimeout(100);
+
+    const keyedOff = { a: await rect(leafOf('rl-a')),
+                       b: await rect(leafOf('rl-b')) };
+
+    check(first.x > second.x && along === 'panetab-rl-b',
+          'right to left, the arrow pointing left along a strip is the ' +
+          `next tab: ${along}`);
+
+    check(Math.abs(first.width - 100 - dragged) <= 2,
+          'and a divider dragged right narrows the leaf on its right: ' +
+          `${Math.round(first.width)} to ${Math.round(dragged)}`);
+
+    check(Math.abs(keyed - dragged - 16) <= 2,
+          'and the arrow pointing left widens it: ' +
+          `${Math.round(dragged)} to ${Math.round(keyed)}`);
+
+    check(hinted.ok && d.x + d.width <= a.x + 1,
+          'and a tab dropped on a left edge is shown and put on the left: ' +
+          `${JSON.stringify(hinted)} ${Math.round(d.x)} ${Math.round(a.x)}`);
+
+    check(keyedOff.a.x > keyedOff.b.x,
+          'and Alt Shift and the arrow pointing right splits a pane off ' +
+          `to the right: ${Math.round(keyedOff.a.x)} ` +
+          `${Math.round(keyedOff.b.x)}`);
+
+    await own.evaluate(() => window.rtlPanes.destroy());
+    await own.close();
+    }
+
+    /* ---- nobody looking ----
+     *
+     * The untiled page is a scroll, and a pane scrolled out of it is as
+     * out of sight as one behind a tab; a window in the background is
+     * out of sight whatever is in it. onShow says so in both, and says
+     * it from the start rather than yes and then no.
+     */
+    {
+    const own = await browser.newPage({ viewport: NARROW });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    const looked = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const told = [];
+        const root = document.createElement('div');
+
+        document.body.replaceChildren(root);
+        window.scrollTo(0, 0);
+
+        for (const id of ['ns-top', 'ns-low'])
+        {
+            const el = document.createElement('section');
+
+            el.id = id;
+            el.dataset.pane = '';
+            el.style.height = '1500px';
+            document.body.append(el);
+        }
+
+        const panes = createPanes({
+            root, catalog: ['ns-top', 'ns-low'], mode: 'm',
+            on: false, param: 'unseen',
+            storage: { getItem: () => null, setItem: () => {},
+                       removeItem: () => {} },
+            onShow: (id, on) => told.push(`${id} ${on}`),
+        });
+
+        const first = [...told];
+
+        await wait(200);
+
+        const settled = told.length === first.length;
+
+        window.scrollTo(0, 1800);
+        await wait(300);
+
+        const scrolled = told.slice(first.length);
+        const asked = [panes.visible('ns-top'), panes.visible('ns-low')];
+
+        /* The window put behind another. */
+        const was = told.length;
+
+        Object.defineProperty(document, 'hidden',
+                              { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        const away = told.slice(was);
+
+        delete document.hidden;
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        const back = told.slice(was + away.length);
+
+        panes.destroy();
+
+        return { first, settled, scrolled, asked, away, back };
+    });
+
+    check(JSON.stringify(looked.first) ===
+              '["ns-top true","ns-low false"]' && looked.settled,
+          'untiled, a pane below the fold is told it is out of sight from ' +
+          `the start, and not told otherwise first: ${looked.first}`);
+
+    check(JSON.stringify(looked.scrolled) ===
+              '["ns-top false","ns-low true"]' &&
+          !looked.asked[0] && looked.asked[1],
+          'and scrolled to, the two change places: ' +
+          `${looked.scrolled}`);
+
+    check(JSON.stringify(looked.away) === '["ns-low false"]' &&
+          JSON.stringify(looked.back) === '["ns-low true"]',
+          'and a window in the background has nothing on the screen: ' +
+          `${looked.away} then ${looked.back}`);
+
     await own.close();
     }
 }

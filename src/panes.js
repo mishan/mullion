@@ -72,8 +72,14 @@
 
 /* The screen a tiled layout is worth having on. Both halves matter, and
    the second is the one that gets forgotten: a finger is not a mouse, and
-   a divider you cannot grab is worse than no divider. */
-const MEDIA = '(min-width: 60em) and (pointer: fine)';
+   a divider you cannot grab is worse than no divider.
+
+   `any-pointer' and not `pointer': a screen with a mouse or a trackpad
+   anywhere is a screen somebody can drag a divider on. A tablet with a
+   keyboard and trackpad attached calls its main pointer the finger, and
+   it has 60em and a pointer that aims -- which is everything tiling
+   asks for. */
+const MEDIA = '(min-width: 60em) and (any-pointer: fine)';
 
 /* A divider's thickness and a leaf's own floor, in CSS pixels. The first
    of these is also drawn, and the drawing reads it from the root as
@@ -299,15 +305,69 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
     }
 
+    /* How far outside the window a pane in the document still counts as
+       on the screen: close enough that scrolling to it finds it already
+       drawn rather than starting to. */
+    const NEAR = 100;
+
+    /* id -> whether that pane is on the screen in the document, as the
+       browser last said. Not there is not asked yet, and then the pane's
+       box is measured instead: saying yes until the browser gets round to
+       answering is telling a pane below the fold to start, and then to
+       stop again. */
+    const inView = new Map();
+
+    const near = (el) =>
+    {
+        const r = el.getBoundingClientRect();
+
+        return r.bottom >= -NEAR && r.top <= innerHeight + NEAR &&
+               r.right >= -NEAR && r.left <= innerWidth + NEAR;
+    };
+
+    /* The document is a scroll, and a pane scrolled out of it is as out
+       of sight as one behind a tab. Watched only while there is no
+       layout: a tiled pane is on the screen if it is in front, which the
+       render already knows. */
+    const sight = typeof IntersectionObserver === 'function'
+        ? new IntersectionObserver((changes) =>
+          {
+              for (const e of changes)
+                  inView.set(e.target.id, e.isIntersecting);
+
+              settle();
+          }, { rootMargin: `${NEAR}px` })
+        : null;
+
+    let watching = false;
+
+    const watch = (on) =>
+    {
+        if (sight === null || on === watching)
+            return;
+
+        watching = on;
+        inView.clear();
+        sight.disconnect();
+
+        if (on)
+            for (const p of panes.values())
+                sight.observe(p.el);
+    };
+
     /* Whether a pane's work is worth doing.
      *
-     * Three ways for the answer to be no and one thing done about all
-     * three: the mode it belongs to is not up (the attribute available()
-     * sets), it is folded away, or -- once there is a layout to be out
-     * of -- it is not in it. */
+     * Four ways for the answer to be no and one thing done about all of
+     * them: the mode it belongs to is not up (the attribute available()
+     * sets), the window is not being looked at (another browser tab, a
+     * minimized window), and then either it is folded away or scrolled
+     * out of the document, or -- once there is a layout to be out of --
+     * it is not in front in it. */
     const visible = (p) =>
-        !off(p.el) &&
-        (tiled ? onScreen.has(p.id) : p.summary === null || p.el.open);
+        !off(p.el) && !document.hidden &&
+        (tiled ? onScreen.has(p.id)
+               : (p.summary === null || p.el.open) &&
+                 (inView.get(p.id) ?? near(p.el)));
 
     /* Whether a pane is in play at all: this page has it and the mode it
        belongs to is up. Everything the layout does is over these. */
@@ -798,6 +858,16 @@ export function createPanes ({ root, catalog, layouts, mode,
        a `:' in one is a class or a pseudo-class to a selector. */
     const find = (id) => root.querySelector(`#${CSS.escape(id)}`);
 
+    /* Whether a row runs from the right where this element is: a page
+     * that reads right to left lays a split's first child out on the
+     * right, and everything that turns a direction on the screen into a
+     * place in the tree -- an arrow key, a pointer dragged, an edge
+     * dropped on -- has to turn it the other way round there. Asked of
+     * the element each time rather than of the page once: a direction
+     * is inherited, and can change under any box.
+     */
+    const backward = (el) => getComputedStyle(el).direction === 'rtl';
+
     /* ---- dragging a tab ---- */
 
     /* Where a tab would land if it were let go here: a place in a strip,
@@ -860,7 +930,13 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (side === null || !splittable(leaf, id, side[0]))
             return { drop: 'into', leaf, box };
 
-        return { drop: 'beside', leaf, box, dir: side[0], after: side[1] };
+        /* `far' is the right or the bottom half, which is what is drawn;
+           `after' is which side of the leaf it goes in the tree, which
+           for a row is the other one in a page that reads leftward. */
+        const [dir, far] = side;
+
+        return { drop: 'beside', leaf, box, dir, far,
+                 after: dir === 'row' && backward(box) ? !far : far };
     };
 
     /* What the drop would do, drawn over the pane it would do it to. */
@@ -901,9 +977,9 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         hint.hidden = false;
         hint.style.left = `${r.left - o.left +
-            (half && row && where.after ? r.width / 2 : 0)}px`;
+            (half && row && where.far ? r.width / 2 : 0)}px`;
         hint.style.top = `${r.top - o.top +
-            (half && !row && where.after ? r.height / 2 : 0)}px`;
+            (half && !row && where.far ? r.height / 2 : 0)}px`;
         hint.style.width = `${half && row ? r.width / 2 : r.width}px`;
         hint.style.height = `${half && !row ? r.height / 2 : r.height}px`;
     };
@@ -1330,7 +1406,9 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
             return;
 
-        const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+        /* The arrow pointing the way the strip reads is the next tab. */
+        const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key] *
+                     (backward(e.currentTarget) ? -1 : 1);
         const to = e.key === 'Home' ? 0
                  : e.key === 'End' ? ids.length - 1
                  : step === undefined ? -1
@@ -1452,7 +1530,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 const to = row ? m.clientX : m.clientY;
 
                 moved ||= to !== from;
-                by(to - from);
+                by((to - from) * (row && backward(bar) ? -1 : 1));
                 from = to;
             };
 
@@ -1485,7 +1563,11 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (step === undefined)
                 return;
 
-            by(step * 16);
+            /* Left and right the way the pointer would go: in a row that
+               reads leftward, the first child is the one on the right. */
+            const flip = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+
+            by(step * 16 * (flip && row && backward(bar) ? -1 : 1));
             changed();
             e.preventDefault();
         });
@@ -1740,6 +1822,8 @@ export function createPanes ({ root, catalog, layouts, mode,
             ? was.closest('.pane')?.id.replace(/^pane-/, '') ?? null : null;
         const tab = was instanceof Element &&
                     was.classList.contains('panetab') ? was.id : null;
+
+        watch(!tiled && !dead);
 
         if (!tiled)
         {
@@ -2022,7 +2106,10 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (to !== null)
                 into(id, to);
             else
-                beside(id, leaf, dir, way[0] + way[1] > 0);
+                beside(id, leaf, dir,
+                       way[1] > 0 ||
+                       (way[0] !== 0 &&
+                        (way[0] > 0) !== backward(boxOf(leaf))));
 
             unzoomFor(leafWith(id));
             done(leafWith(id) ?? leaf);
@@ -2072,6 +2159,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     };
 
     window.addEventListener('keydown', command);
+    document.addEventListener('visibilitychange', settle);
 
     const apply = () =>
     {
@@ -2344,6 +2432,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             dead = true;
             window.removeEventListener('keydown', command);
+            document.removeEventListener('visibilitychange', settle);
             screen.removeEventListener('change', apply);
 
             for (const p of panes.values())

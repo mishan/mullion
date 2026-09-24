@@ -86,9 +86,21 @@ try
           plain.every(([, parent]) => parent === 'BODY'),
           'a narrow window is the plain page, every section in the body');
 
+    /* The preview is below the fold on a phone's page, and a pane nobody
+       has scrolled to is a pane whose work can wait. */
+    await page.waitForTimeout(1500);
+
+    check(!await page.evaluate(() =>
+              window.playground.pane('visible', 'preview') ||
+              document.getElementById('log').textContent.includes('lit')),
+          'and the program waits while the preview is scrolled out of sight');
+
+    await page.evaluate(() =>
+        document.getElementById('preview').scrollIntoView());
+
     check(await until(page, () =>
               document.getElementById('log').textContent.includes('lit')),
-          'and the program runs there, and logs');
+          'and runs once it is scrolled to, and logs');
 
     /* ---- tiled ---- */
 
