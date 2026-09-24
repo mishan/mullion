@@ -574,7 +574,98 @@ html.touch .status .hint { display: none; }
 
 html.touch body.tiled .bar { flex-wrap: nowrap; padding: 0.4em 0.7em; }
 html.touch body.tiled .what,
+html.touch body.tiled .bar > .to-plain,
 html.touch body.tiled .to-github { display: none; }
+
+/* The menu, which only a phone asked to tile has: its button at the end
+   of the header, and the menu dropped from it, over the layout rather
+   than pushing it down. */
+.menu-button { display: none; }
+
+html.touch body.tiled .bar { position: relative; }
+
+html.touch body.tiled .menu-button
+{
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.1em 0.55em;
+    font-size: 1.05em;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.menu-count
+{
+    min-width: 1.4em;
+    padding: 0 0.35em;
+    font-size: 0.7em;
+    font-weight: 650;
+    line-height: 1.5;
+    color: var(--on-accent);
+    background: var(--accent);
+    border-radius: 1em;
+}
+
+.menu-count[hidden] { display: none; }
+
+.menu
+{
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0.5em;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2em;
+    min-width: 13em;
+    padding: 0.5em;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+.menu[hidden], body:not(.tiled) .menu { display: none; }
+
+.menu > a
+{
+    padding: 0.45em 0.6em;
+    color: var(--text);
+    text-decoration: none;
+    border-radius: 6px;
+}
+
+.menu > a:hover { background: var(--surface-2); }
+
+/* mullion's list of closed panes, drawn in the menu: a column of them,
+   under a line that says what they are. */
+#menu-panes .panedrawer
+{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.2em;
+    margin: 0 0 0.3em;
+    padding-bottom: 0.4em;
+    border-bottom: 1px solid var(--line);
+}
+
+#menu-panes .panedrawerlabel
+{
+    align-self: flex-start;
+    padding: 0.2em 0.6em;
+    font-size: 0.8em;
+}
+
+#menu-panes .paneclosed
+{
+    padding: 0.45em 0.6em;
+    font-size: 1em;
+    text-align: left;
+    border-style: solid;
+    border-radius: 6px;
+}
 html.touch body.tiled .bar { gap: 0.6em; }
 html.touch body.tiled .panesroot { margin: 0.35em; }
 html.touch body.tiled .status { gap: 0.9em; padding: 0.25em 0.7em; }

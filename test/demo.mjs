@@ -383,6 +383,28 @@ try
     check(await until(page, () => window.playground.layout().dir === 'col'),
           'and upright again, one over the other');
 
+    /* The closed panes in the menu, with mullion's `drawer' option,
+       rather than in a row above the layout. */
+    await page.evaluate(() => window.playground.pane('close', 'console'));
+
+    const menu = await page.evaluate(() => ({
+        row: document.querySelector('.panesroot > .panedrawer') !== null,
+        listed: document.querySelector('#menu #panereopen-console') !== null,
+        count: document.getElementById('menu-count').textContent,
+    }));
+
+    check(!menu.row && menu.listed && Number(menu.count) > 0,
+          'on a phone the closed panes are listed in the menu, not above ' +
+          `the layout, and counted on its button: ${menu.count}`);
+
+    await page.click('#menu-button');
+    await page.click('#panereopen-console');
+
+    check(await page.evaluate(() =>
+              window.playground.onScreen().console &&
+              document.getElementById('menu').hidden),
+          'and one brought back from there is on the screen, the menu shut');
+
     await touch.close();
 }
 catch (e)
