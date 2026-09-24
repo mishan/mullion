@@ -509,6 +509,34 @@ const shown = (id, on) =>
 /* A note that the layout was kept, which fades. */
 let fading = 0;
 
+/* Every layout a person left, for an undo: onLayout says what each
+   change came to, and setLayout puts an old one back. A mode or a
+   screen of another shape is a history of its own, so either starts it
+   over. */
+const steps = [];
+let now = null;
+let undoing = false;
+
+const forget = () =>
+{
+    steps.length = 0;
+    now = panes.layout();
+    $('undo').disabled = true;
+};
+
+$('undo').addEventListener('click', () =>
+{
+    const back = steps.pop();
+
+    if (back === undefined)
+        return;
+
+    undoing = true;
+    panes.setLayout(back);
+    undoing = false;
+    $('undo').disabled = steps.length === 0;
+});
+
 /* Null until createPanes returns: onShow is told about the first panes
    on the screen from inside it. */
 let panes = null;
@@ -521,6 +549,7 @@ panes = createPanes({
     store: store(),
     on: true,
     reset: '↺',
+    version: 1,
     ...(TOUCH && {
         media: '(min-width: 20em)',
         strip: 'scroll',
@@ -536,8 +565,19 @@ panes = createPanes({
             marks();
         }
     },
-    onLayout: () =>
+    onLayout: (layout) =>
     {
+        if (!undoing && now !== null)
+        {
+            steps.push(now);
+
+            if (steps.length > 50)
+                steps.shift();
+        }
+
+        now = layout;
+        $('undo').disabled = steps.length === 0;
+
         const note = $('st-saved');
 
         note.textContent = 'Layout saved';
@@ -552,6 +592,7 @@ const pick = (name) =>
     mode = name;
     keep('mode', name);
     panes.mode(name);
+    forget();
 
     for (const b of document.querySelectorAll('[data-mode]'))
         b.setAttribute('aria-pressed', String(b.dataset.mode === name));
@@ -582,8 +623,11 @@ for (const b of document.querySelectorAll('[data-open]'))
 if (TOUCH)
 {
     side.addEventListener('change', () =>
+    {
         panes.setLayouts(side.matches ? SIDEWAYS : UPRIGHT,
-                         { store: store() }));
+                         { store: store(), version: 1 });
+        forget();
+    });
 
     /* The layout is as tall as what is visible, which on a phone is the
        window less the keyboard when one is up -- and `dvh' does not know

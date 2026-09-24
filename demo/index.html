@@ -42,9 +42,10 @@
 
   <span class="grow"></span>
 
+  <button type="button" id="undo" class="undo" disabled title="Put the layout back the way it was before the last change" aria-label="Undo layout">↶<span class="label"> Undo layout</span></button>
   <a class="to-plain" href="?panes=0" title="The same page, with the tiler off">Plain page</a>
   <a class="to-tiled" href="./">Tiled</a>
-  <a href="https://github.com/mishan/mullion">GitHub</a>
+  <a class="to-github" href="https://github.com/mishan/mullion">GitHub</a>
 </header>
 
 <p class="plain-note">
@@ -202,7 +203,8 @@ requestAnimationFrame(draw);
 <details id="keys" data-pane data-pane-title="Keys" data-pane-min="220">
   <summary>Keys and gestures</summary>
   <table class="keys">
-    <tr><td>Drag a tab</td><td>onto a pane to stack, an edge to split, the drawer to close</td></tr>
+    <tr><td>Drag a tab</td><td>onto a tab strip to put it there, a pane to stack, an edge to split, the drawer to close</td></tr>
+    <tr><td><kbd>Esc</kbd> while dragging</td><td>take the drag back</td></tr>
     <tr><td>Drag a divider</td><td>or focus it and use the arrows; double-click evens it up</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>←↑→↓</kbd></td><td>focus the pane that way</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>←↑→↓</kbd></td><td>move the pane that way</td></tr>

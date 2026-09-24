@@ -228,6 +228,22 @@ try
               document.querySelector('#ed-css textarea')),
           'a file in the list raises its editor out of the drawer, focused');
 
+    /* ---- undo ---- */
+
+    const before = await page.evaluate(() =>
+        JSON.stringify(window.playground.layout()));
+
+    check(await page.evaluate(() => document.getElementById('undo').disabled)
+          === false,
+          'with a change made, there is something to undo');
+
+    await page.evaluate(() => window.playground.pane('close', 'files'));
+    await page.click('#undo');
+
+    check(await page.evaluate(() =>
+              JSON.stringify(window.playground.layout())) === before,
+          'and Undo layout puts back the layout before the last change');
+
     /* ---- the modes ---- */
 
     await page.click('[data-mode="debug"]');
@@ -236,6 +252,9 @@ try
               window.playground.onScreen().activity &&
               !window.playground.onScreen().files),
           'Debug is a layout of its own');
+
+    check(await page.evaluate(() => document.getElementById('undo').disabled),
+          'with a history of its own, empty to start');
 
     await page.close();
 

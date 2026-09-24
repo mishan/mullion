@@ -144,6 +144,7 @@ kbd
 
 .bar > a:not(.brand)
 {
+    white-space: nowrap;
     font-size: 0.9em;
     color: var(--muted);
     text-decoration: none;
@@ -178,7 +179,25 @@ kbd
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
 }
 
+/* Quiet until there is something to undo. */
+.undo
+{
+    padding: 0.15em 0.7em;
+    font-size: 0.9em;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.undo:hover:not(:disabled) { border-color: var(--muted); }
+.undo:disabled { color: var(--muted); opacity: 0.55; cursor: default; }
+
+html.touch .undo { padding: 0.15em 0.55em; }
+html.touch .undo .label { display: none; }
+
 /* What only makes sense one side of the threshold. */
+body:not(.tiled) .undo,
 body:not(.tiled) .modes,
 body:not(.tiled) .to-plain,
 body.tiled .to-tiled,
@@ -534,7 +553,9 @@ html.touch .status .hint { display: none; }
 }
 
 html.touch body.tiled .bar { flex-wrap: nowrap; padding: 0.4em 0.7em; }
-html.touch body.tiled .what { display: none; }
+html.touch body.tiled .what,
+html.touch body.tiled .to-github { display: none; }
+html.touch body.tiled .bar { gap: 0.6em; }
 html.touch body.tiled .panesroot { margin: 0.35em; }
 html.touch body.tiled .status { gap: 0.9em; padding: 0.25em 0.7em; }
 html.touch body.tiled #st-activity { display: none; }
