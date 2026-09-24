@@ -214,7 +214,7 @@ await page.evaluate(() =>
     area.setSelectionRange(at, at + was.length);
 });
 await wait(400);
-await page.keyboard.type('120, 210, 255', { delay: 110 });
+await page.keyboard.type('255, 0, 255', { delay: 110 });
 await wait(500);
 await page.keyboard.press('Home');
 await wait(1100);
