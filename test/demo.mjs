@@ -256,6 +256,86 @@ try
     check(await page.evaluate(() => document.getElementById('undo').disabled),
           'with a history of its own, empty to start');
 
+    /* ---- a file somebody adds ----
+     *
+     * Its editor is a pane the page adds: in front where it is made,
+     * kept in its place across a visit, closed by its tab without going
+     * to the drawer, and opened again from the list. */
+
+    await page.click('[data-mode="write"]');
+    await page.click('#new-file');
+
+    const made = await page.evaluate(() => ({
+        tab: document.getElementById('panetab-ed-x-1')
+                    ?.getAttribute('aria-selected'),
+        focus: document.activeElement ===
+               document.querySelector('#ed-x-1 textarea'),
+        listed: document.querySelector('#more-files [data-extra="ed-x-1"]')
+                !== null,
+        kind: window.playground.pane('panes')
+                    .find((p) => p.id === 'ed-x-1')?.kind,
+    }));
+
+    check(made.tab === 'true' && made.focus && made.listed &&
+          made.kind === 'ephemeral',
+          'New file opens an editor for it, in front and focused, as an ' +
+          `ephemeral pane: ${JSON.stringify(made)}`);
+
+    await page.fill('#ed-x-1 textarea',
+                    "console.log('from module-1');\nnope();\n");
+
+    check(await until(page, () =>
+              document.getElementById('log').textContent
+                      .includes('from module-1') &&
+              [...document.querySelectorAll('#log .where')]
+                  .some((w) => w.textContent === 'module-1.js:2')),
+          'and it runs before app.js, its errors at its own lines');
+
+    /* A visit later: open again, where it was, and not in the way. */
+    const leafOf = () => page.evaluate(() =>
+        [...document.getElementById('panetab-ed-x-1')
+                    .closest('.panetabs').querySelectorAll('.panetab')]
+            .map((t) => t.id).join(' '));
+    const was = await leafOf();
+
+    await page.reload();
+    await page.waitForFunction(() => window.playground !== undefined);
+
+    check(await page.evaluate(() =>
+              document.getElementById('panetab-ed-x-1') !== null) &&
+          await leafOf() === was &&
+          await page.evaluate(() =>
+              document.activeElement?.closest?.('#ed-x-1') == null),
+          `and a visit later it is open again where it was: ${was}`);
+
+    /* Its tab's cross closes the editor, and not the file. */
+    await page.click('#panetab-ed-x-1');
+    await page.click('#paneshut-ed-x-1');
+
+    check(await page.evaluate(() =>
+              document.getElementById('ed-x-1') === null &&
+              document.getElementById('panereopen-ed-x-1') === null &&
+              document.querySelector('[data-extra="ed-x-1"]') !== null &&
+              !JSON.stringify(window.playground.layout()).includes('ed-x')),
+          'closing its tab ends the editor, not in the drawer, and the ' +
+          'file stays in the list');
+
+    await page.click('[data-extra="ed-x-1"]');
+
+    check(await page.evaluate(() =>
+              document.querySelector('#ed-x-1 textarea')?.value
+                      .includes('from module-1') &&
+              window.playground.onScreen()['ed-x-1']),
+          'and the list opens it again, as it was left');
+
+    await page.click('#more-files .del');
+
+    check(await page.evaluate(() =>
+              document.getElementById('ed-x-1') === null &&
+              document.querySelector('[data-extra]') === null),
+          'and deleting the file closes its editor too');
+
+    await page.evaluate(() => { localStorage.clear(); });
     await page.close();
 
     /* ---- a phone, asked to tile ---- */

@@ -15,8 +15,12 @@
  *     the screen, and is not rebuilt for edits nobody can see;
  *   - the Activity chart draws only while somebody can see it;
  *   - the Console counts what arrived while it was hidden, on its tab;
- *   - and the Files list raises an editor wherever it is, including out
- *     of the drawer.
+ *   - the Files list raises an editor wherever it is, including out
+ *     of the drawer;
+ *   - and a file somebody adds gets an editor that is a pane added while
+ *     the page is up: ephemeral, so that closing its tab ends the editor
+ *     rather than filling the drawer, and kept in its place across a
+ *     visit by `later'.
  */
 
 import { createPanes } from '../src/panes.js';
@@ -127,8 +131,157 @@ for (const lang of Object.keys(EDITORS))
 const redraw = Object.fromEntries(Object.keys(EDITORS).map(
     (lang) => [lang, editor($(EDITORS[lang]).querySelector('.editor'))]));
 
-const source = () => Object.fromEntries(
-    Object.keys(EDITORS).map((lang) => [lang, area(lang).value]));
+const source = () => ({
+    ...Object.fromEntries(
+        Object.keys(EDITORS).map((lang) => [lang, area(lang).value])),
+    before: extra.map((f) => ({ name: f.name, text: f.text })),
+});
+
+/* ---- files somebody adds ----
+ *
+ * Modules of their own, run ahead of app.js in the order they were made.
+ * The file is the page's to keep, in this browser; its editor is a pane
+ * the page adds when the file is opened and removes when its tab is
+ * closed. Which ones were open is kept too, so a visit later opens them
+ * again where they were.
+ */
+const extra = kept('extra', []).filter((f) =>
+    typeof f?.id === 'string' && typeof f.name === 'string' &&
+    typeof f.text === 'string');
+const opened = new Set(kept('opened', []).filter((id) =>
+    extra.some((f) => f.id === id)));
+
+const fileOf = (id) => extra.find((f) => f.id === id);
+
+const keepExtra = () =>
+{
+    keep('extra', extra);
+    keep('opened', [...opened]);
+};
+
+/* The editor for one, made where the plain page keeps the others, and
+   handed to the tiler by whoever made it. */
+const sheet = (f) =>
+{
+    const section = document.createElement('section');
+    const head = document.createElement('h2');
+    const box = document.createElement('div');
+    const text = document.createElement('textarea');
+
+    section.id = f.id;
+    section.dataset.pane = '';
+    section.dataset.paneTitle = f.name;
+    section.dataset.paneMin = '260';
+    head.className = 'head';
+    head.textContent = f.name;
+    box.className = 'editor';
+    box.dataset.lang = 'js';
+    text.setAttribute('aria-label', f.name);
+    text.value = f.text;
+    box.append(text);
+    section.append(head, box);
+    $('more-editors').append(section);
+
+    redraw[f.id] = editor(box);
+    text.addEventListener('input', () =>
+    {
+        f.text = text.value;
+        keepExtra();
+        edited();
+    });
+
+    return section;
+};
+
+/* Open, and in front: made and added if it is not open already. */
+const openExtra = (id, { focus = true } = {}) =>
+{
+    if ($(id) === null)
+    {
+        sheet(fileOf(id));
+        panes.add(id, { near: 'ed-js', focus: false });
+        opened.add(id);
+        keepExtra();
+        roster();
+    }
+
+    if (panes.tiled())
+        panes.present(id, { focus: false });
+    else if (focus)
+        $(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (focus)
+        $(id).querySelector('textarea')
+             .focus({ preventScroll: !panes.tiled() });
+};
+
+/* Closed: the editor is gone, and the file is where it was. What the
+   tiler hands back is ours to delete. */
+const closeExtra = (id) =>
+{
+    panes.remove(id)?.remove();
+    delete redraw[id];
+    opened.delete(id);
+    onScreen.delete(id);
+    keepExtra();
+    roster();
+};
+
+/* And deleted, which is the file itself. */
+const dropExtra = (id) =>
+{
+    if (opened.has(id))
+        closeExtra(id);
+
+    extra.splice(extra.indexOf(fileOf(id)), 1);
+    keepExtra();
+    list();
+    edited();
+};
+
+const list = () =>
+    $('more-files').replaceChildren(...extra.map((f) =>
+    {
+        const li = document.createElement('li');
+        const open = document.createElement('button');
+        const ext = document.createElement('span');
+        const del = document.createElement('button');
+
+        open.type = 'button';
+        open.dataset.extra = f.id;
+        ext.className = 'ext ext-js';
+        ext.textContent = 'JS';
+        open.append(ext, f.name);
+        open.addEventListener('click', () => openExtra(f.id));
+
+        del.type = 'button';
+        del.className = 'del';
+        del.textContent = '×';
+        del.title = `Delete ${f.name}`;
+        del.setAttribute('aria-label', `Delete ${f.name}`);
+        del.addEventListener('click', () => dropExtra(f.id));
+
+        li.append(open, del);
+
+        return li;
+    }));
+
+$('new-file').addEventListener('click', () =>
+{
+    const n = Math.max(0, ...extra.map((f) => Number(f.id.slice(5)))) + 1;
+    const f = {
+        id: `ed-x-${n}`,
+        name: `module-${n}.js`,
+        text: `// module-${n}.js runs before app.js, and what it declares\n` +
+              '// app.js can use.\n',
+    };
+
+    extra.push(f);
+    keepExtra();
+    list();
+    openExtra(f.id);
+    edited();
+});
 
 const marks = () =>
 {
@@ -140,17 +293,25 @@ const marks = () =>
                            area(lang).value !== area(lang).defaultValue);
         b.classList.toggle('on', panes.tiled() && panes.visible(id));
     }
+
+    for (const b of document.querySelectorAll('[data-extra]'))
+        b.classList.toggle('on', panes.tiled() &&
+                                 panes.visible(b.dataset.extra));
 };
 
 /* ---- what is on the screen ---- */
 
 const onScreen = new Map(CATALOG.map((id) => [id, false]));
 
+/* Every pane there is now, which is the catalog and the files open. */
+const everyPane = () => [...CATALOG, ...opened];
+
 const status = () =>
 {
-    const n = [...onScreen.values()].filter(Boolean).length;
+    const n = everyPane().filter((id) => onScreen.get(id)).length;
 
-    $('st-panes').textContent = `${n} of ${CATALOG.length} panes on screen`;
+    $('st-panes').textContent =
+        `${n} of ${everyPane().length} panes on screen`;
 
     for (const li of $('onscreen').children)
         li.classList.toggle('on', onScreen.get(li.dataset.id));
@@ -171,15 +332,21 @@ const dot = (on) =>
     return d;
 };
 
-$('onscreen').append(...CATALOG.map((id) =>
+/* The list in Activity, made again when a pane comes or goes. */
+const roster = () =>
 {
-    const li = document.createElement('li');
+    $('onscreen').replaceChildren(...everyPane().map((id) =>
+    {
+        const li = document.createElement('li');
 
-    li.dataset.id = id;
-    li.append(dot(false), TITLES[id]);
+        li.dataset.id = id;
+        li.append(dot(false), TITLES[id] ?? fileOf(id).name);
 
-    return li;
-}));
+        return li;
+    }));
+
+    status();
+};
 
 /* ---- the preview ---- */
 
@@ -225,6 +392,9 @@ addEventListener('keydown', (e) =>
 
 $('reset').addEventListener('click', () =>
 {
+    for (const f of [...extra])
+        dropExtra(f.id);
+
     for (const lang of Object.keys(EDITORS))
     {
         area(lang).value = area(lang).defaultValue;
@@ -260,7 +430,7 @@ const title = () =>
     panes.setTitle('console', unread > 0 ? `Console (${unread})`
                                          : TITLES.console);
 
-const say = (level, text, line) =>
+const say = (level, text, line, file) =>
 {
     log.querySelector('.empty')?.remove();
 
@@ -305,7 +475,7 @@ const say = (level, text, line) =>
             const where = document.createElement('span');
 
             where.className = 'where';
-            where.textContent = `app.js:${line}`;
+            where.textContent = `${file ?? 'app.js'}:${line}`;
             li.append(where);
         }
 
@@ -359,7 +529,7 @@ addEventListener('message', (e) =>
     else if (e.data.kind === 'log')
         say(e.data.level === 'info' || e.data.level === 'debug'
                 ? 'log' : e.data.level,
-            e.data.text, e.data.line);
+            e.data.text, e.data.line, e.data.file);
     else if (e.data.kind === 'fps')
         fps = e.data.fps;
 });
@@ -550,6 +720,19 @@ panes = createPanes({
     on: true,
     reset: '↺',
     version: 1,
+
+    /* The files that were open when this was last left, which are added
+       once the tiler is up: their places in a kept layout are theirs. */
+    later: (id) => opened.has(id),
+
+    /* The cross on a file's editor, or Alt W: the page ends it. Nothing
+       here is lost by closing -- the text is kept as it is typed -- so
+       there is nothing to ask first. */
+    onDiscard: (id) =>
+    {
+        if (fileOf(id) !== undefined)
+            closeExtra(id);
+    },
     ...(TOUCH && {
         media: '(min-width: 20em)',
         strip: 'scroll',
@@ -586,6 +769,16 @@ panes = createPanes({
         fading = setTimeout(() => note.classList.add('gone'), 1400);
     },
 });
+
+/* The files open last time, open again: quietly, where they were. */
+for (const id of opened)
+{
+    sheet(fileOf(id));
+    panes.add(id, { focus: false });
+}
+
+list();
+roster();
 
 const pick = (name) =>
 {
@@ -662,7 +855,7 @@ if (onScreen.get('preview'))
 
 /* What a harness may ask, the same shape the fixture offers. */
 window.playground = {
-    panes: () => [...CATALOG],
+    panes: () => everyPane(),
     layout: () => panes.layout(),
     pane: (what, ...args) => panes[what](...args),
     tiled: () => panes.tiled(),

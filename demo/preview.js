@@ -34,7 +34,7 @@
    page is built, so a program started behind a tab does not draw one
    frame before it is told; the program is written in as a string, with
    every `<' escaped so that nothing in it can close this script. */
-const SHIM = (shown, js) => `
+const SHIM = (shown, files) => `
 (() => {
   const post = (m) => parent.postMessage({ playground: 1, ...m }, '*');
   const text = (v) => {
@@ -43,9 +43,9 @@ const SHIM = (shown, js) => `
     try { return JSON.stringify(v) ?? String(v); } catch { return String(v); }
   };
 
-  const program = URL.createObjectURL(new Blob(
-    [${JSON.stringify(js).replace(/</g, '\\u003c')}],
-    { type: 'text/javascript' }));
+  const files = ${JSON.stringify(files).replace(/</g, '\\u003c')};
+  const programs = files.map((f) => URL.createObjectURL(
+    new Blob([f.text], { type: 'text/javascript' })));
 
   post({ kind: 'start' });
 
@@ -57,9 +57,12 @@ const SHIM = (shown, js) => `
     };
   }
 
-  addEventListener('error', (e) =>
+  addEventListener('error', (e) => {
+    const at = programs.indexOf(e.filename);
     post({ kind: 'log', level: 'error', text: e.message,
-           line: e.filename === program ? e.lineno : undefined }));
+           file: at === -1 ? undefined : files[at].name,
+           line: at === -1 ? undefined : e.lineno });
+  });
   addEventListener('unhandledrejection', (e) =>
     post({ kind: 'log', level: 'error',
            text: 'Unhandled rejection: ' + text(e.reason) }));
@@ -98,27 +101,32 @@ const SHIM = (shown, js) => `
   setInterval(() => { post({ kind: 'fps', fps: frames }); frames = 0; }, 1000);
 
   /* For the end of the body, where the program runs. */
-  document.currentScript.dataset.program = program;
+  document.currentScript.dataset.programs = JSON.stringify(programs);
 })();
 `;
 
 /* At the end of the body: the program, written rather than appended so
    that it runs where it stands -- after the markup, and before the
-   document is done, as an inline script there would. */
-const RUN = `document.write('<script src="' +
-  document.querySelector('script[data-program]').dataset.program +
-  '"><' + '/script>');`;
+   document is done, as an inline script there would. A file each, in
+   order, so that what one declares the next can use and an error says
+   which file it was in. */
+const RUN = `for (const src of JSON.parse(
+  document.querySelector('script[data-programs]').dataset.programs))
+  document.write('<script src="' + src + '"><' + '/script>');`;
 
 /* A closing tag inside the stylesheet would close the element it is in. */
 const guard = (src) => src.replace(/<\/(style)/gi, '<\\/$1');
 
 /* The page, as `srcdoc'. */
-export function build ({ html, css, js }, shown)
+export function build ({ html, css, js, before = [] }, shown)
 {
+    /* The files the page added, ahead of app.js. */
+    const files = [...before, { name: 'app.js', text: js }];
+
     return '<!doctype html>\n<html lang="en">\n<head>\n' +
            '<meta charset="utf-8">\n' +
            `<style>\n${guard(css)}\n</style>\n` +
-           `<script>${SHIM(shown, js)}</script>\n` +
+           `<script>${SHIM(shown, files)}</script>\n` +
            `</head>\n<body>\n${html}\n<script>${RUN}</script>\n` +
            '</body>\n</html>\n';
 }

@@ -65,7 +65,10 @@
     <li><button type="button" data-open="ed-css"><span class="ext ext-css">#</span>style.css</button></li>
     <li><button type="button" data-open="ed-js"><span class="ext ext-js">JS</span>app.js</button></li>
   </ul>
-  <p class="aside">Edits are kept in this browser.</p>
+  <ul class="files" id="more-files" aria-label="Files you added"></ul>
+  <button type="button" id="new-file" class="quiet">New file</button>
+  <p class="aside">A new file runs before app.js. Closing its tab closes
+  the editor, not the file. Edits are kept in this browser.</p>
   <button type="button" id="reset" class="quiet">Reset examples</button>
 </section>
 
@@ -171,6 +174,10 @@ requestAnimationFrame(draw);
 </textarea></div>
 </section>
 
+<!-- Where the editors for files somebody adds are put, before mullion
+     is handed them: on the plain page, with the other files. -->
+<div id="more-editors"></div>
+
 <section id="preview" data-pane data-pane-title="Preview" data-pane-min="260">
   <h2 class="head">Preview</h2>
   <div class="tools">
@@ -210,7 +217,7 @@ requestAnimationFrame(draw);
     <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>←↑→↓</kbd></td><td>move the pane that way</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>\</kbd> / <kbd>Alt</kbd> <kbd>-</kbd></td><td>split right / split down</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>Enter</kbd></td><td>zoom the pane in front</td></tr>
-    <tr><td><kbd>Alt</kbd> <kbd>W</kbd></td><td>close it to the drawer</td></tr>
+    <tr><td><kbd>Alt</kbd> <kbd>W</kbd></td><td>close it: to the drawer, or for a file you added, closed</td></tr>
     <tr><td><kbd>Alt</kbd> <kbd>0</kbd></td><td>start this layout over</td></tr>
     <tr><td><kbd>Ctrl</kbd> <kbd>Enter</kbd></td><td>run the preview</td></tr>
   </table>
