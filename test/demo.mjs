@@ -14,8 +14,9 @@
  * check.mjs holds the module to its promises against test/fixture/. This
  * holds the page people are sent to against its own: that it tiles and
  * untiles with every id in place, that its program runs and logs, that
- * the program and the chart rest when nobody can see them, and that an
- * error is reported against the line of app.js it was on.
+ * the program and the chart rest when nobody can see them, that an
+ * error is reported against the line of app.js it was on, and that a
+ * phone asked to tile gets a layout for the way it is held.
  *
  * Exit status is the number of failures.
  */
@@ -237,6 +238,44 @@ try
           'Debug is a layout of its own');
 
     await page.close();
+
+    /* ---- a phone, asked to tile ---- */
+
+    const touch = await browser.newContext({
+        viewport: { width: 390, height: 844 }, hasTouch: true,
+        isMobile: name !== 'firefox' });
+
+    page = await touch.newPage();
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(base);
+    await page.waitForFunction(() => window.playground !== undefined);
+
+    check(!await page.evaluate(() => window.playground.tiled()),
+          'a phone gets the plain page');
+
+    await page.goto(`${base}?touch`);
+    await page.waitForFunction(() => window.playground?.tiled());
+
+    const dir = () => page.evaluate(() => window.playground.layout().dir);
+
+    check(await dir() === 'col' &&
+          await page.evaluate(() =>
+              document.querySelector('.to-plain').search ===
+              '?touch&panes=0'),
+          'and ?touch tiles it, one pane over the other, with a way back ' +
+          'that keeps it');
+
+    await page.setViewportSize({ width: 844, height: 390 });
+
+    check(await until(page, () => window.playground.layout().dir === 'row'),
+          'turned on its side, the two are side by side');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    check(await until(page, () => window.playground.layout().dir === 'col'),
+          'and upright again, one over the other');
+
+    await touch.close();
 }
 catch (e)
 {

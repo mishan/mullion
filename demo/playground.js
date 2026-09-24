@@ -54,7 +54,40 @@ const LAYOUTS = {
     },
 };
 
+/*
+ * And a set for a phone, which is asked for (`?touch'): on a narrow
+ * screen the plain page is the page, and tiling there is something to
+ * try rather than something to be handed. Two panes to a screen, one
+ * shape upright and another on its side, and the rest a tab away.
+ */
+const TOUCH = new URLSearchParams(location.search).has('touch');
+
+const UPRIGHT = {
+    write: {
+        dir: 'col', size: [0.5, 0.5], kids: [
+            { tabs: ['ed-js', 'ed-html', 'ed-css'] },
+            { tabs: ['preview', 'console', 'activity'] }],
+    },
+    debug: {
+        dir: 'col', size: [0.45, 0.55], kids: [
+            { tabs: ['preview'] },
+            { tabs: ['console', 'activity', 'ed-js', 'ed-html', 'ed-css'] }],
+    },
+};
+
+const SIDEWAYS = {
+    write: { ...UPRIGHT.write, dir: 'row' },
+    debug: { ...UPRIGHT.debug, dir: 'row', size: [0.5, 0.5] },
+};
+
+const side = matchMedia('(orientation: landscape)');
+
 const KEPT = 'mullion-playground';
+
+/* Where a layout is kept: one store per shape of screen, so that turning
+   a phone over and back finds each the way it was left. */
+const store = () =>
+    !TOUCH ? KEPT : `${KEPT}:${side.matches ? 'side' : 'up'}`;
 
 const kept = (key, fallback) =>
 {
@@ -487,11 +520,16 @@ let panes = null;
 panes = createPanes({
     root: $('root'),
     catalog: CATALOG,
-    layouts: LAYOUTS,
+    layouts: !TOUCH ? LAYOUTS : side.matches ? SIDEWAYS : UPRIGHT,
     mode,
-    store: KEPT,
+    store: store(),
     on: true,
     reset: '↺',
+    ...(TOUCH && {
+        media: '(min-width: 20em)',
+        strip: 'scroll',
+        split: 18,
+    }),
     onShow: (id, on) =>
     {
         shown(id, on);
@@ -544,6 +582,34 @@ for (const b of document.querySelectorAll('[data-open]'))
 
         text.focus({ preventScroll: !panes.tiled() });
     });
+
+if (TOUCH)
+{
+    side.addEventListener('change', () =>
+        panes.setLayouts(side.matches ? SIDEWAYS : UPRIGHT,
+                         { store: store() }));
+
+    /* The layout is as tall as what is visible, which on a phone is the
+       window less the keyboard when one is up -- and `dvh' does not know
+       about the keyboard. */
+    const fit = () =>
+        document.documentElement.style.setProperty(
+            '--pane-height', `${Math.round(visualViewport.height)}px`);
+
+    visualViewport?.addEventListener('resize', fit);
+
+    if (window.visualViewport)
+        fit();
+
+    document.documentElement.classList.add('touch');
+
+    /* And the way to the plain page and back keeps the phone's set. */
+    for (const a of document.querySelectorAll('.to-plain'))
+        a.search = '?touch&panes=0';
+
+    for (const a of document.querySelectorAll('.to-tiled, .if-forced a'))
+        a.search = '?touch';
+}
 
 if (new URLSearchParams(location.search).get('panes') === '0')
     document.documentElement.classList.add('forced');

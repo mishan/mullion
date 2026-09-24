@@ -523,6 +523,22 @@ body:not(.tiled) .status { display: none; }
    flow and the text box is laid over it, so the gutter sets the height. */
 body:not(.tiled) .editor { height: auto; min-height: 8em; max-height: 28em; }
 
+/* A phone, tiled because somebody asked (`?touch'): no chords to hint
+   at, a header on one row, and text at a size Safari will not zoom in
+   on when an editor is focused. */
+html.touch .status .hint { display: none; }
+
+@media (pointer: coarse)
+{
+    .editor { font-size: 16px; }
+}
+
+html.touch body.tiled .bar { flex-wrap: nowrap; padding: 0.4em 0.7em; }
+html.touch body.tiled .what { display: none; }
+html.touch body.tiled .panesroot { margin: 0.35em; }
+html.touch body.tiled .status { gap: 0.9em; padding: 0.25em 0.7em; }
+html.touch body.tiled #st-activity { display: none; }
+
 @media (max-width: 40em)
 {
     .bar { flex-wrap: wrap; row-gap: 0.3em; }
