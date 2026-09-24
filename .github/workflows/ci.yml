@@ -1,6 +1,8 @@
 # The tests are a browser driving demo/index.html, which is the whole
 # claim this module makes: that it adopts a document and puts it back. So
-# there is one job, it installs one browser, and it runs them.
+# there is one job, once per browser: Chromium moves a pane with
+# `moveBefore' and keeps what it was doing, and the others are where the
+# module has to keep it by hand.
 
 name: ci
 
@@ -16,6 +18,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    name: check (${{ matrix.browser }})
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +37,7 @@ jobs:
       # than trusted.
       - run: npm run types
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install ${{ matrix.browser }}
+        run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      - run: npm test
+      - run: npm test -- ${{ matrix.browser }}

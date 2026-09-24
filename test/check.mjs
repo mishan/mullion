@@ -8,8 +8,9 @@
 /*
  * check.mjs -- mullion, in a browser.
  *
- *   npm install && npx playwright install chromium
- *   npm test
+ *   npm install && npx playwright install chromium firefox webkit
+ *   npm test                  # in Chromium
+ *   npm test -- firefox       # or firefox, or webkit
  *
  * Everything here runs against demo/index.html, which is the demo page
  * and nothing more: no build step, no bundler, no framework. What it
@@ -28,7 +29,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { chromium } from 'playwright';
+import * as playwright from 'playwright';
 
 import { serve } from './serve.mjs';
 
@@ -38,6 +39,18 @@ const here = path.dirname(fileURLToPath(import.meta.url));
    under it: mullion asks for 60em and a pointer that is not a finger. */
 const WIDE = { width: 1400, height: 900 };
 const NARROW = { width: 560, height: 900 };
+
+/* Which browser. Chromium by default, and the others because the one
+   thing it does that they do not is `moveBefore': without it every
+   render that moves a pane is an ordinary insert, and that is the path
+   a page in Firefox or Safari takes. */
+const name = process.argv[2] ?? process.env.BROWSER ?? 'chromium';
+
+if (!['chromium', 'firefox', 'webkit'].includes(name))
+{
+    process.stderr.write(`no such browser: ${name}\n`);
+    process.exit(1);
+}
 
 let failures = 0;
 
@@ -52,11 +65,19 @@ function check (cond, what)
     }
 }
 
+/* A claim this browser has no way to test, said rather than passed. */
+function skip (what)
+{
+    process.stdout.write(`skip  ${what}\n`);
+}
+
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
 const errors = [];
 
-const browser = await chromium.launch();
+const browser = await playwright[name].launch();
+
+process.stdout.write(`in ${name} ${browser.version()}\n`);
 
 /* What the document is, pane by pane: where each one sits among its
    siblings, what is in it, and how it is folded. Taken with the tiler off
@@ -368,15 +389,13 @@ try
        it was scrolled to: a box moved into or out of one that is not
        displayed is scrolled to the start in Chromium however it is
        moved, which is why a pane put away is not drawn rather than not
-       displayed. */
+       displayed. Where it was scrolled to is kept in every browser; the
+       <iframe> only where there is `moveBefore' to keep it. */
     await page.keyboard.press('Alt+Digit0');
     await page.waitForTimeout(200);
 
     const collapsed = await page.evaluate(async () =>
     {
-        if (Element.prototype.moveBefore === undefined)
-            return null;
-
         const wait = (ms) => new Promise((go) => setTimeout(go, ms));
         const loads = { list: 0, wide: 0 };
         const frames = Object.keys(loads).map((id) =>
@@ -415,12 +434,13 @@ try
         frames.forEach((frame) => frame.remove());
 
         return { was: { list: was.list, wide: was.wide, scroll: was.scroll },
-                 now: { ...loads, up, scroll } };
+                 now: { ...loads, up, scroll },
+                 moves: Element.prototype.moveBefore !== undefined };
     });
 
-    if (collapsed === null)
-        process.stdout.write('skip  a pane moved by a collapse keeps its ' +
-                             '<iframe>: no moveBefore here\n');
+    if (!collapsed.moves)
+        skip('a pane moved by a collapse keeps its <iframe>: no ' +
+             'moveBefore here');
     else
     {
         check(collapsed.now.up && collapsed.now.list === collapsed.was.list,
@@ -431,44 +451,44 @@ try
         check(collapsed.now.wide === collapsed.was.wide,
               'and nor does the pane closed on the way, or reopened: ' +
               `${collapsed.was.wide} then ${collapsed.now.wide}`);
-
-        check(collapsed.was.scroll > 0 &&
-              collapsed.now.scroll === collapsed.was.scroll,
-              'and that pane is scrolled where it was when it comes back: ' +
-              `${collapsed.was.scroll} then ${collapsed.now.scroll}`);
-
-        /* And a pane behind a tab in the leaf that goes up a level,
-           which is moved with it and is not displayed either. */
-        await page.keyboard.press('Alt+Digit0');
-        await page.waitForTimeout(200);
-        await drag('#panetab-fx-wide', '#pane-fx-list .panebody');
-
-        const tucked = await page.evaluate(async () =>
-        {
-            const wait = (ms) => new Promise((go) => setTimeout(go, ms));
-            const scroller = document.getElementById('fx-scroll');
-
-            scroller.scrollLeft = 350;
-
-            const was = scroller.scrollLeft;
-
-            document.getElementById('panetab-fx-list').click();
-            await wait(100);
-
-            const behind = !scroller.checkVisibility();
-
-            window.tiler.pane('close', 'fx-plot');
-            await wait(150);
-            document.getElementById('panetab-fx-wide').click();
-            await wait(150);
-
-            return { was, behind, now: scroller.scrollLeft };
-        });
-
-        check(tucked.was > 0 && tucked.behind && tucked.now === tucked.was,
-              'and a pane behind a tab in it is scrolled where it was: ' +
-              `${tucked.was} then ${tucked.now}`);
     }
+
+    check(collapsed.was.scroll > 0 &&
+          collapsed.now.scroll === collapsed.was.scroll,
+          'and that pane is scrolled where it was when it comes back: ' +
+          `${collapsed.was.scroll} then ${collapsed.now.scroll}`);
+
+    /* And a pane behind a tab in the leaf that goes up a level,
+       which is moved with it and is not displayed either. */
+    await page.keyboard.press('Alt+Digit0');
+    await page.waitForTimeout(200);
+    await drag('#panetab-fx-wide', '#pane-fx-list .panebody');
+
+    const tucked = await page.evaluate(async () =>
+    {
+        const wait = (ms) => new Promise((go) => setTimeout(go, ms));
+        const scroller = document.getElementById('fx-scroll');
+
+        scroller.scrollLeft = 350;
+
+        const was = scroller.scrollLeft;
+
+        document.getElementById('panetab-fx-list').click();
+        await wait(100);
+
+        const behind = !scroller.checkVisibility();
+
+        window.tiler.pane('close', 'fx-plot');
+        await wait(150);
+        document.getElementById('panetab-fx-wide').click();
+        await wait(150);
+
+        return { was, behind, now: scroller.scrollLeft };
+    });
+
+    check(tucked.was > 0 && tucked.behind && tucked.now === tucked.was,
+          'and a pane behind a tab in it is scrolled where it was: ' +
+          `${tucked.was} then ${tucked.now}`);
 
     /* ---- the dividers ---- */
 
@@ -1180,8 +1200,11 @@ try
      * if the element does not say otherwise.
      */
     {
+    /* A phone, where the browser can be one: Firefox has no mobile
+       mode, and a touch screen at a phone's width is what it has. */
     const touch = await browser.newContext({ viewport: { width: 400, height: 800 },
-                                             hasTouch: true, isMobile: true });
+                                             hasTouch: true,
+                                             isMobile: name !== 'firefox' });
     const phone = await touch.newPage();
 
     phone.on('pageerror', (e) => errors.push(e.message));
@@ -1263,32 +1286,42 @@ try
           `a divider is a drag and not a scroll: touch-action ` +
           `${narrow.action}`);
 
-    /* By a finger: pressed on the divider and moved 150 pixels up. */
-    const heightOf = () => phone.evaluate(() => Math.round(
-        document.getElementById('pane-ph-a').closest('.paneleaf')
-                .getBoundingClientRect().height));
-    const upper = await heightOf();
-    const bar = await phone.locator('.panesplit').last().boundingBox();
-    const cdp = await touch.newCDPSession(phone);
-    const x = bar.x + bar.width / 2;
-    const y = bar.y + bar.height / 2;
+    /* By a finger: pressed on the divider and moved 150 pixels up.
+       Only Chromium can be told to move one -- Playwright's touch
+       screen taps and does nothing else -- so elsewhere it is said and
+       not tested. */
+    if (name !== 'chromium')
+        skip('and a finger moves it as far as it moved: no touch drag ' +
+             `in ${name}`);
+    else
+    {
+        const heightOf = () => phone.evaluate(() => Math.round(
+            document.getElementById('pane-ph-a').closest('.paneleaf')
+                    .getBoundingClientRect().height));
+        const upper = await heightOf();
+        const bar = await phone.locator('.panesplit').last().boundingBox();
+        const cdp = await touch.newCDPSession(phone);
+        const x = bar.x + bar.width / 2;
+        const y = bar.y + bar.height / 2;
 
-    await cdp.send('Input.dispatchTouchEvent',
-                   { type: 'touchStart', touchPoints: [{ x, y }] });
-
-    for (let i = 1; i <= 15; i++)
         await cdp.send('Input.dispatchTouchEvent',
-                       { type: 'touchMove',
-                         touchPoints: [{ x, y: y - i * 10 }] });
+                       { type: 'touchStart', touchPoints: [{ x, y }] });
 
-    await cdp.send('Input.dispatchTouchEvent',
-                   { type: 'touchEnd', touchPoints: [] });
-    await phone.waitForTimeout(100);
+        for (let i = 1; i <= 15; i++)
+            await cdp.send('Input.dispatchTouchEvent',
+                           { type: 'touchMove',
+                             touchPoints: [{ x, y: y - i * 10 }] });
 
-    const lower = await heightOf();
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchEnd', touchPoints: [] });
+        await phone.waitForTimeout(100);
 
-    check(Math.abs(upper - lower - 150) <= 2,
-          `and a finger moves it as far as it moved: ${upper} to ${lower}`);
+        const lower = await heightOf();
+
+        check(Math.abs(upper - lower - 150) <= 2,
+              'and a finger moves it as far as it moved: ' +
+              `${upper} to ${lower}`);
+    }
 
     /* And the other shape's layouts, in place: the one that was up is
        saved under its store, the new store's default comes up, and the

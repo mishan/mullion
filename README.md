@@ -235,10 +235,11 @@ the module promises is about a document, and a claim about a document
 needs one with enough in it to be worth making.
 
 ```sh
-npm install && npx playwright install chromium
-npm test       # the demo, in a browser
-npm run types  # the declarations, which are hand-written
-npm run shot   # the gif above, re-recorded (needs ffmpeg)
+npm install && npx playwright install chromium firefox webkit
+npm test              # the demo, in Chromium
+npm test -- firefox   # or webkit
+npm run types         # the declarations, which are hand-written
+npm run shot          # the gif above, re-recorded (needs ffmpeg)
 ```
 
 ## License
