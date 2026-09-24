@@ -127,7 +127,8 @@ const KEYS = {
 
 /* Where a layout is kept between visits. localStorage by default and an
    object with the same three methods when a page has somewhere better --
-   a profile on a server is the first thing anybody with accounts wants.
+   a profile on a server is the first thing anybody with accounts wants,
+   and a server answers later, so any of the three may return a promise.
    Read lazily: a browser that refuses storage altogether throws on the
    property, and every call here is inside a try. */
 const KEEP = {
@@ -161,7 +162,8 @@ export function createPanes ({ root, catalog, layouts, mode,
                                storage = KEEP, keys = {},
                                strip = 'shrink', lone = true,
                                closed: label = 'Closed:',
-                               reset: again = null })
+                               reset: again = null,
+                               onLayout = () => {} })
 {
     /* The commands, with a page's own over the defaults rather than
        instead of them: overriding the one chord that clashes should not
@@ -506,11 +508,20 @@ export function createPanes ({ root, catalog, layouts, mode,
 
     const key = () => `${store}:${where}`;
 
+    /* A promise from the storage, which is a server's answer: a write
+       that fails is the same as one that throws, and is not left for the
+       window to report as unhandled. */
+    const quiet = (r) =>
+    {
+        if (typeof r?.then === 'function')
+            r.then(undefined, () => {});
+    };
+
     const save = () =>
     {
         try
         {
-            storage.setItem(key(), JSON.stringify(tree));
+            quiet(storage.setItem(key(), JSON.stringify(tree)));
         }
         catch
         {
@@ -520,30 +531,89 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
     };
 
+    /* How many times the layout has been asked for or changed. A saved
+       layout that arrives late is put up only if nothing has happened
+       since it was asked for: what somebody did in the meantime is newer
+       than what they did last visit. */
+    let edits = 0;
+
+    /* Somebody changed the layout: it is kept, and the page is told, with
+       a copy -- which is what a page keeping layouts somewhere of its own
+       needs, and a page offering undo, and one that only wants to know. */
+    const changed = () =>
+    {
+        edits++;
+        save();
+        onLayout(structuredClone(tree), where);
+    };
+
+    /* A saved layout, as the page's own tree: or null, for one that is
+       not there, does not parse, or keeps nothing this page has. */
+    const read = (text) =>
+    {
+        try
+        {
+            const saved = JSON.parse(text);
+
+            return saved !== null && sane(saved) ? known(saved) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    };
+
+    /* The page's own layout for the mode that is up. A saved layout that
+       keeps nothing -- every pane closed, or every one it names gone from
+       the page -- is no layout, and what there is instead is this, rather
+       than every pane stacked in one leaf. */
+    const fresh = () =>
+        known(structuredClone(layouts?.[where] ??
+                              { tabs: [...panes.keys()] })) ??
+        { tabs: [...panes.keys()] };
+
     /* The layout for the mode that is up: what somebody last left, or the
-       page's own default for it. */
+     * page's own default for it.
+     *
+     * A storage that answers with a promise is answered with the default
+     * now and what was kept once it arrives, so that the page is never
+     * waiting on a server to be laid out -- unless, by then, the mode has
+     * changed, or somebody has moved something, or it has all been handed
+     * back.
+     */
     const load = () =>
     {
+        const ask = ++edits;
+        const at = key();
         let saved = null;
 
         try
         {
-            saved = JSON.parse(storage.getItem(key()));
+            const got = storage.getItem(at);
+
+            if (typeof got?.then === 'function')
+                got.then((text) =>
+                {
+                    const kept = read(text);
+
+                    if (kept === null || dead || ask !== edits ||
+                        at !== key())
+                        return;
+
+                    tree = kept;
+
+                    if (tiled)
+                        render();
+                }, () => {});
+            else
+                saved = read(got);
         }
         catch
         {
             saved = null;
         }
 
-        /* A saved layout that keeps nothing -- every pane closed, or
-           every one it names gone from the page -- is no layout, and what
-           there is instead is the page's own default rather than every
-           pane stacked in one leaf. */
-        const fallback = () => known(
-            structuredClone(layouts?.[where] ?? { tabs: [...panes.keys()] }));
-
-        tree = (saved !== null && sane(saved) ? known(saved) : null) ??
-               fallback() ?? { tabs: [...panes.keys()] };
+        tree = saved ?? fresh();
     };
 
     /* ---- moving a pane about ---- */
@@ -843,7 +913,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 else
                     beside(id, where.leaf, where.dir, where.after);
 
-                save();
+                changed();
                 render();
             };
 
@@ -1095,7 +1165,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     {
         drawer(id);
         focus = leaf;
-        save();
+        changed();
         render();
         find(`panereopen-${id}`)?.focus();
     };
@@ -1110,7 +1180,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             return;
 
         leaf.active = i;
-        save();
+        changed();
         render();
         find(`panetab-${id}`)?.focus();
     };
@@ -1241,21 +1311,27 @@ export function createPanes ({ root, catalog, layouts, mode,
         bar.addEventListener('pointerdown', (e) =>
         {
             let from = row ? e.clientX : e.clientY;
+            let moved = false;
 
             const move = (m) =>
             {
                 const to = row ? m.clientX : m.clientY;
 
+                moved ||= to !== from;
                 by(to - from);
                 from = to;
             };
 
+            /* Kept and told only if it went anywhere: a press on a
+               divider is not a new layout. */
             const up = () =>
             {
                 bar.removeEventListener('pointermove', move);
                 bar.removeEventListener('pointerup', up);
                 bar.removeEventListener('pointercancel', up);
-                save();
+
+                if (moved)
+                    changed();
             };
 
             bar.setPointerCapture(e.pointerId);
@@ -1276,7 +1352,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 return;
 
             by(step * 16);
-            save();
+            changed();
             e.preventDefault();
         });
 
@@ -1291,7 +1367,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             for (const k of kids)
                 node.size[node.kids.indexOf(k)] = share;
 
-            save();
+            changed();
             render();
         });
 
@@ -1354,22 +1430,28 @@ export function createPanes ({ root, catalog, layouts, mode,
 
     /* The mode's layout as the page wrote it: what was kept is forgotten
        and the tree is made again from the default. By the chord, by the
-       drawer's button, or by the page. */
+       drawer's button, or by the page.
+
+       Made here and not read back through `load': a storage that answers
+       later may not have forgotten yet, and would hand back the layout
+       this is starting over from. */
     const reset = () =>
     {
         try
         {
-            storage.removeItem(key());
+            quiet(storage.removeItem(key()));
         }
         catch
         {
             /* Nothing to forget, which is the same as forgetting. */
         }
 
+        edits++;
         zoom = null;
-        tree = null;
+        tree = fresh();
         focus = null;
         render();
+        onLayout(structuredClone(tree), where);
     };
 
     /* The mode's own layout back, where a chord cannot be pressed: a
@@ -1465,7 +1547,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
                 into(id, to);
                 unzoomFor(to);
-                save();
+                changed();
                 render();
                 find(`panetab-${id}`)?.focus();
             });
@@ -1756,7 +1838,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     const done = (leaf) =>
     {
         focus = leaf;
-        save();
+        changed();
         render();
         raiseTab(leaf);
     };
@@ -2000,7 +2082,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             focus = leaf;
             unzoomFor(leaf);
-            save();
+            changed();
             render();
 
             if (take)
@@ -2015,7 +2097,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 return;
 
             drawer(id);
-            save();
+            changed();
             render();
         },
 

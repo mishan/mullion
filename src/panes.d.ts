@@ -69,11 +69,14 @@ export interface PanesOptions {
   edge?: number;
   /** The query parameter that forces the tiler on or off. */
   param?: string;
-  /** Where a layout is kept between visits. */
+  /** Where a layout is kept between visits. Any of the three may answer
+   *  with a promise, for a layout kept on a server: the page opens on the
+   *  default, and what was kept replaces it when it arrives, unless the
+   *  mode has changed or somebody has moved something by then. */
   storage?: {
-    getItem(key: string): string | null;
-    setItem(key: string, value: string): void;
-    removeItem(key: string): void;
+    getItem(key: string): string | null | Promise<string | null>;
+    setItem(key: string, value: string): void | Promise<void>;
+    removeItem(key: string): void | Promise<void>;
   };
   /** The commands, merged over the defaults. */
   keys?: Partial<PaneKeys>;
@@ -92,6 +95,11 @@ export interface PanesOptions {
    *  first tab strip, or in the drawer's row when every leaf is bare.
    *  None when null. */
   reset?: string | null;
+  /** Somebody changed the layout -- a drag, a divider, a chord, a close,
+   *  a reset, or a call on the handle -- with a copy of it and the mode it
+   *  is for. Not called for a layout loaded, or swapped in by a mode or
+   *  `setLayouts`. */
+  onLayout?: (layout: PaneNode, mode: string) => void;
 }
 
 export interface PaneKeys {

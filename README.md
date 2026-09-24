@@ -131,6 +131,7 @@ Everything below is a default rather than a rule.
 | `mode` | which named layout to open on | — |
 | `layouts` | one default tree per mode | every pane in one leaf |
 | `onShow` | `(id, on)` — a pane came into view, or left it | — |
+| `onLayout` | `(layout, mode)` — somebody changed the layout | — |
 | `on` | tile when the screen allows it | `false` |
 | `store` | localStorage key prefix; the mode is appended | `'panes'` |
 | `editing` | extra selector for "a key here is text" | — |
@@ -139,7 +140,7 @@ Everything below is a default rather than a rule.
 | `leaf` | a leaf's own floor in pixels | `64` |
 | `edge` | how much of a leaf's edge is an edge | `0.2` |
 | `param` | query parameter that forces it on or off | `'panes'` |
-| `storage` | where a layout is kept | `localStorage` |
+| `storage` | where a layout is kept; its methods may return promises | `localStorage` |
 | `keys` | the commands, merged over the defaults | `Alt` chords |
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
 | `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
@@ -171,6 +172,25 @@ toolbar) are the usual changes, with a `reset` button, since there is no
 runs there too. `lone: false` goes further and takes the strip off *any*
 pane moved into a leaf of its own, which leaves it no tab to drag or
 close by.
+
+A layout is kept in `localStorage` under the store and the mode. A page
+with accounts keeps it on a server instead: `storage` takes the same three
+methods, and any of them may return a promise. The page opens on its
+default and the kept layout replaces it when it arrives, unless somebody
+has moved something first. `onLayout` is told of every change a person
+makes, with a copy of the tree, which is also what an undo button needs:
+
+```js
+createPanes({
+  // …
+  storage: {
+    getItem: (k) => fetch(`/prefs/${k}`).then((r) => (r.ok ? r.text() : null)),
+    setItem: (k, v) => fetch(`/prefs/${k}`, { method: 'PUT', body: v }),
+    removeItem: (k) => fetch(`/prefs/${k}`, { method: 'DELETE' }),
+  },
+  onLayout: (layout, mode) => history.push({ layout, mode }),
+});
+```
 
 `destroy()` is the way back out: every pane under its own parent again,
 every listener off the window, and the page as it was found. A page that
