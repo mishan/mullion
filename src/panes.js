@@ -160,7 +160,8 @@ export function createPanes ({ root, catalog, layouts, mode,
                                edge = EDGE, param = 'panes',
                                storage = KEEP, keys = {},
                                strip = 'shrink', lone = true,
-                               closed: label = 'Closed:' })
+                               closed: label = 'Closed:',
+                               reset: again = null })
 {
     /* The commands, with a page's own over the defaults rather than
        instead of them: overriding the one chord that clashes should not
@@ -179,10 +180,16 @@ export function createPanes ({ root, catalog, layouts, mode,
        "Cha..." names nothing. And whether a leaf with one tab still has a
        strip over it: on a desktop that strip is the handle a pane is
        dragged and closed by, on a phone a row of height spent saying
-       "Keys" over a keyboard. Classes on the root, so panes.css says what
-       each means. */
+       "Keys" over a keyboard. A class on the root and one on each such
+       leaf, so panes.css says what each means.
+     *
+       `lone' as a list names the panes that go without, and is the one
+       to use: `false' takes the strip off any pane somebody moves into
+       a leaf of its own, and with it the only way to drag or close it
+       where there is no keyboard for the chords. */
     root.classList.toggle('panescroll', strip === 'scroll');
-    root.classList.toggle('panealone', !lone);
+
+    const bare = (id) => (Array.isArray(lone) ? lone.includes(id) : !lone);
 
     /* And the one number the drawing and the arithmetic share, written
        where the drawing can read it, and written again by setLayouts. */
@@ -1000,6 +1007,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         const strip = box.firstElementChild;
         const wraps = [];
 
+        box.classList.toggle('panebare', ids.length === 1 && bare(ids[0]));
+
         leaf.active = Math.min(Math.max(leaf.active ?? 0, 0), ids.length - 1);
 
         ids.forEach((id, i) =>
@@ -1343,6 +1352,26 @@ export function createPanes ({ root, catalog, layouts, mode,
         kids.forEach(fill);
     };
 
+    /* The mode's layout as the page wrote it: what was kept is forgotten
+       and the tree is made again from the default. By the chord, by the
+       drawer's button, or by the page. */
+    const reset = () =>
+    {
+        try
+        {
+            storage.removeItem(key());
+        }
+        catch
+        {
+            /* Nothing to forget, which is the same as forgetting. */
+        }
+
+        zoom = null;
+        tree = null;
+        focus = null;
+        render();
+    };
+
     /* The panes no leaf has room for, listed above the layout: one click
        from being put back, into the leaf they left or -- where that leaf
        closed with them -- whichever one was last touched. Nothing here
@@ -1354,7 +1383,10 @@ export function createPanes ({ root, catalog, layouts, mode,
     {
         const made = [];
 
-        tray.hidden = out.length === 0;
+        /* With a reset button the row is always there, since the button
+           is: a layout with nothing closed is as likely to want it as
+           one with everything closed. */
+        tray.hidden = out.length === 0 && again === null;
 
         if (out.length > 0)
         {
@@ -1392,6 +1424,21 @@ export function createPanes ({ root, catalog, layouts, mode,
             });
 
             grab(button, id);
+            made.push(button);
+        }
+
+        /* The mode's own layout back, where a chord cannot be pressed:
+           a phone, whose only other way out of a leaf with no strip is
+           the storage in its settings. */
+        if (again !== null)
+        {
+            const button = document.createElement('button');
+
+            button.type = 'button';
+            button.className = 'panereset';
+            button.textContent = again;
+            button.title = 'Put back the layout this page starts with';
+            button.addEventListener('click', () => reset());
             made.push(button);
         }
 
@@ -1767,21 +1814,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             done(holds(leaf) ? leaf : firstLeaf());
         }
         else if (keymap.reset.includes(e.code))
-        {
-            try
-            {
-                storage.removeItem(key());
-            }
-            catch
-            {
-                /* Nothing to forget, which is the same as forgetting. */
-            }
-
-            zoom = null;
-            tree = null;
-            focus = null;
-            render();
-        }
+            reset();
         else
             return;
 
@@ -1887,6 +1920,13 @@ export function createPanes ({ root, catalog, layouts, mode,
            back. A copy: what somebody reads it for is to compare it with
            itself later. */
         layout: () => (tree === null ? null : structuredClone(tree)),
+
+        /* Back to the mode's default, as Alt 0 does. */
+        reset: () =>
+        {
+            if (!dead)
+                reset();
+        },
 
         /* Raised: in front of whatever leaf holds it, and out of the
          * drawer if that is where it was. Nothing to raise it above
@@ -2023,7 +2063,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             document.body.classList.remove('tiled');
             render();
 
-            root.classList.remove('panesroot', 'panescroll', 'panealone');
+            root.classList.remove('panesroot', 'panescroll');
             root.style.removeProperty('--pane-split');
             /* What the page put in the overlay is the page's, and goes
                back to the body it came from rather than out with it. */

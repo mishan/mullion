@@ -38,8 +38,9 @@ const options: PanesOptions = {
     keys: { close: ['KeyW'] },
     storage: window.sessionStorage,
     strip: 'scroll',
-    lone: false,
+    lone: ['console'],
     closed: 'More:',
+    reset: 'Reset layout',
 };
 
 const panes: Panes = createPanes(options);
@@ -48,6 +49,7 @@ panes.available('console', false);
 panes.mode('default');
 panes.present('editor', { focus: false });
 panes.close('console');
+panes.reset();
 panes.setTitle('editor', 'notes.txt');
 panes.setLayouts({ default: { tabs: ['editor'] } },
                  { store: 'side', split: 18 });
