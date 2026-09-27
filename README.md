@@ -539,7 +539,8 @@ npm test              # the fixture, in Chromium
 npm test -- firefox   # or webkit
 npm run test:demo     # the playground still works
 npm run types         # the declarations, which are hand-written
-npm run shot          # the gif above and the demo's link preview, re-recorded (needs ffmpeg)
+npm run shot          # the gif above and the demo's link preview, re-recorded
+                      # (needs ffmpeg, and shotbox checked out at ../shotbox)
 ```
 
 ## Browsers

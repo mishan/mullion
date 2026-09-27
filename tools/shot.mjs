@@ -11,6 +11,9 @@
  *   npm install && npx playwright install chromium
  *   node tools/shot.mjs            # needs ffmpeg on the PATH for the gif
  *
+ * The server, the page errors and the gif are shotbox's, from a checkout
+ * beside this one (../shotbox): the pieces several projects had copied.
+ *
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
  * not a still of the result. This drives demo/index.html the way a
@@ -33,15 +36,11 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 
 import { chromium } from 'playwright';
+import { gif, pageErrors, serve } from 'shotbox';
 
-import { serve } from '../test/serve.mjs';
-
-const run = promisify(execFile);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(here, '..', 'demo');
 
@@ -140,6 +139,7 @@ const context = await browser.newContext({
 });
 
 const page = await context.newPage();
+const errors = pageErrors(page);
 const began = Date.now();
 
 await fresh(page);
@@ -246,6 +246,14 @@ await page.mouse.move(SIZE.width * 0.5, SIZE.height * 0.45, { steps: 20 });
 await press('Alt+Digit0', 'Alt  0 — start over');
 await wait(1400);
 
+/* A recording of a page that threw is not one to put in the README, and
+   nothing in the picture would say so. */
+if (errors.length > 0)
+{
+    process.stderr.write(`the page raised: ${errors.join(' | ')}\n`);
+    process.exit(1);
+}
+
 /* The still is of the layout and not of the recording, so what this file
    drew comes back out of it first. */
 await page.evaluate(() =>
@@ -259,21 +267,11 @@ await context.close();
 await browser.close();
 site.close();
 
-/* webm to gif, through a palette of its own: the default 216 colors turn
-   a page of flat grays into bands. Sixty-four of its own are plenty for
-   a page of flat grays, and undithered: the preview animates every
-   frame, and a dither pattern over it is noise the gif pays for each
-   time. */
-const palette = path.join(films, 'palette.png');
-const filters = `fps=${FPS},scale=${WIDE}:-1:flags=lanczos`;
-const from = ['-ss', String(cut), '-i', film];
-
-await run('ffmpeg', ['-y', ...from, '-vf',
-                     `${filters},palettegen=stats_mode=diff:max_colors=64`,
-                     palette]);
-await run('ffmpeg', ['-y', ...from, '-i', palette, '-lavfi',
-                     `${filters} [x]; [x][1:v] paletteuse=dither=none:diff_mode=rectangle`,
-                     path.join(out, 'mullion.gif')]);
+/* Sixty-four colors of its own are plenty for a page of flat grays, and
+   undithered: the preview animates every frame, and a dither pattern
+   over it is noise the gif pays for each time. */
+await gif(film, path.join(out, 'mullion.gif'),
+          { width: WIDE, fps: FPS, from: cut, colors: 64, dither: 'none' });
 
 await fs.rm(films, { recursive: true, force: true });
 
