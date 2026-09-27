@@ -11,8 +11,8 @@
  *   npm install && npx playwright install chromium
  *   node tools/shot.mjs            # needs ffmpeg on the PATH for the gif
  *
- * The server, the page errors and the gif are shotbox's, from a checkout
- * beside this one (../shotbox): the pieces several projects had copied.
+ * The server, the page errors and the gif are shotbox's: the pieces
+ * several projects had copied.
  *
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and

@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "playwright": "1.63.0",
-    "shotbox": "file:../shotbox/node",
+    "shotbox": "github:mishan/shotbox#gif-options",
     "typescript": "5.9.3"
   }
 }
