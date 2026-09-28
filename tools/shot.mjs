@@ -35,6 +35,7 @@
  * Both are the only things here the page does not already do.
  */
 
+import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,6 +56,15 @@ const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
 const films = await fs.mkdtemp(path.join(os.tmpdir(), 'mullion-'));
 const seal = await sealed();
+
+/* However this ends -- done, the page raising, or a step that throws --
+   the recording and the seal's scratch home do not stay behind in /tmp.
+   Synchronously, since that is all an exit handler gets to do. */
+process.on('exit', () =>
+{
+    for (const dir of [films, seal.dir])
+        rmSync(dir, { recursive: true, force: true });
+});
 const browser = await chromium.launch({ env: seal.env });
 
 /* The page as a first visit finds it: no edits, no layouts, no mode. */
@@ -210,7 +220,6 @@ await page.screenshot({ path: path.join(out, 'mullion.png') });
 const video = await reel.end();
 
 await browser.close();
-await seal.close();
 site.close();
 
 /* Sixty-four colors of its own are plenty for a page of flat grays, and
@@ -219,8 +228,6 @@ site.close();
 await gif(video, path.join(out, 'mullion.gif'),
           { width: WIDE, fps: FPS, from: reel.from, colors: 64,
             dither: 'none' });
-
-await fs.rm(films, { recursive: true, force: true });
 
 for (const name of ['mullion.gif', 'mullion.png', 'og.png'])
 {
