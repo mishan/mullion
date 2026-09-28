@@ -3348,10 +3348,21 @@ try
 
     const behind = await settled('0');
 
-    check(unpinned && pinnedShown && behind,
+    /* And let go, in front again: out of sight. The pin is left off, and
+       c-a in front, for the checks after this one. */
+    await own.evaluate(() => window.rv.panes.present('c-a', { focus: false }));
+
+    const again = await settled('1');
+
+    await own.evaluate(() => window.rv.panes.setCornerPinned('c-a', false));
+
+    const unpinnedAgain = await settled('0');
+
+    check(unpinned && pinnedShown && behind && again && unpinnedAgain,
           'setCornerPinned keeps a corner in sight while its pane is in ' +
-          `front, and not behind another: ${unpinned} ${pinnedShown} ` +
-          `${behind} ${await opacity()}`);
+          'front, not behind another, and not once let go: ' +
+          `${unpinned} ${pinnedShown} ${behind} ${again} ${unpinnedAgain} ` +
+          `${await opacity()}`);
 
     /* The grip dragged onto the other leaf's switcher, before its first
        tab: the switcher is a strip to drop on while a drag is in the
