@@ -11,6 +11,14 @@
   suite, for that implementation to run too. `floating`, `zoom` and
   `closed` are reserved as envelope fields and `slots` as a leaf's, for
   mullion-gtk; mullion reads past them.
+- **Tabs in the corner.** `header: 'corner'` takes the strip off every
+  leaf and puts its tabs over the leaf's top corner instead, seen while
+  the pointer or the focus is in it: the panes' icons, a grip for a pane
+  alone, and a cross for the one in front. They drag, drop and take the
+  arrow keys as a strip does. `--pane-corner` on the leaf is their width,
+  for a pane's first row to leave room; `setHeader` changes it once up.
+- **Icons.** `data-pane-icon`, or `setIcon`, gives a pane's tab an image:
+  beside its title in a strip, in place of it in the corner.
 
 ### Fixed
 

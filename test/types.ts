@@ -66,6 +66,7 @@ const bare: PanesOptions = {
     mode: 'default',
     storage: remote,
     lone: false,
+    header: 'corner',
     reset: null,
     drawer: false,
     onDiscard: async (id: string) => { await Promise.resolve(id); },
@@ -87,6 +88,9 @@ panes.present('editor', { focus: false });
 panes.close('console');
 panes.reset();
 panes.setTitle('editor', 'notes.txt');
+panes.setIcon('editor', 'editor.svg');
+panes.setIcon('editor', null);
+panes.setHeader('corner');
 panes.setLayouts({ default: { tabs: ['editor'] } },
                  { store: 'side', split: 18, version: 'b' });
 

@@ -3196,6 +3196,179 @@ try
 
     await own.close();
 
+    /* The tabs in the corner: no strip across a leaf, and the same tabs
+       over its top corner -- the icons of the panes sharing it, a grip
+       for a pane alone, one cross for the pane in front -- seen only
+       while the pointer or the focus is in the leaf. */
+    own = await sandbox();
+    await own.evaluate(() =>
+    {
+        const dot = 'data:image/svg+xml,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8">' +
+            '<circle cx="4" cy="4" r="3"/></svg>');
+
+        window.rv.box('c-a').dataset.paneIcon = dot;
+        window.rv.box('c-b');
+        window.rv.box('c-c');
+        window.rv.make(['c-a', 'c-b', 'c-c'], {
+            header: 'corner',
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['c-a', 'c-b'] }, { tabs: ['c-c'] }] } } });
+    });
+
+    /* Once the browser has laid the corner out and said how wide. */
+    await own.waitForFunction(() => document.querySelector('.panecorner')
+        ?.style.getPropertyValue('--pane-corner') !== '');
+
+    /* The pointer in the other leaf, and the first one's controls let
+       fade. */
+    await own.mouse.move(1300, 800);
+    await own.waitForFunction(() => getComputedStyle(
+        document.querySelector('#panetab-c-a').closest('.panetabs'))
+        .opacity === '0', null, { timeout: 2000 }).catch(() => {});
+
+    const cornered = await own.evaluate(() =>
+    {
+        const tab = (id) => document.getElementById(`panetab-${id}`);
+        const leaf = tab('c-a').closest('.paneleaf');
+        const strip = leaf.querySelector('.panetabs');
+
+        return {
+            row: document.getElementById('pane-c-a').getBoundingClientRect()
+                .top === leaf.getBoundingClientRect().top,
+            icon: tab('c-a').querySelector('img.paneicon') !== null &&
+                  tab('c-a').textContent === '' &&
+                  tab('c-a').getAttribute('aria-label') === 'C-A',
+            words: tab('c-b').textContent === 'C-B',
+            grip: tab('c-c').classList.contains('panegrip') &&
+                  tab('c-c').getAttribute('aria-label') === 'C-C',
+            shut: [...strip.querySelectorAll('.paneshut')].map((b) => b.id)
+                      .join(),
+            unseen: getComputedStyle(strip).opacity === '0',
+            /* Hidden from the pointer too: its corner is the pane's. */
+            through: (() =>
+            {
+                const r = document.getElementById('paneshut-c-a')
+                                  .getBoundingClientRect();
+
+                return document.elementFromPoint(r.x + r.width / 2,
+                                                 r.y + r.height / 2).id !==
+                       'paneshut-c-a';
+            })(),
+            room: parseFloat(leaf.style.getPropertyValue('--pane-corner')) ===
+                  Math.ceil(leaf.getBoundingClientRect().right -
+                            strip.getBoundingClientRect().left),
+            roles: [...strip.children].every(
+                (c) => c.getAttribute('role') === 'presentation'),
+        };
+    });
+
+    check(cornered.row,
+          'header: "corner" takes the strip\'s row from the leaf');
+    check(cornered.icon && cornered.words && cornered.grip,
+          'and its tabs are an icon, or the title where there is none, and ' +
+          `a grip for a pane alone: ${JSON.stringify(cornered)}`);
+    check(cornered.shut === 'paneshut-c-a',
+          `with one cross, for the pane in front: ${cornered.shut}`);
+    check(cornered.unseen && cornered.through,
+          'out of sight, and out of the pointer\'s way, with it elsewhere');
+    check(cornered.room,
+          'their width from the leaf\'s edge written on it as --pane-corner');
+    check(cornered.roles,
+          'and nothing in the tablist but its tabs\' wrappers');
+
+    const leafBox = await own.evaluate(() =>
+    {
+        const r = document.getElementById('pane-c-a').getBoundingClientRect();
+
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+
+    await own.mouse.move(leafBox.x, leafBox.y);
+
+    /* Waited for: the controls fade in. */
+    const faded = await own.waitForFunction(() => getComputedStyle(
+        document.querySelector('#panetab-c-a').closest('.panetabs'))
+        .opacity === '1', null, { timeout: 2000 }).then(() => true, () => false);
+
+    check(faded, 'and in sight with the pointer in the leaf');
+
+    await own.click('#panetab-c-b');
+
+    check(await own.evaluate(() => window.rv.panes.layout().kids[0].active)
+              === 1,
+          'an icon clicked raises its pane');
+
+    await own.keyboard.press('ArrowLeft');
+
+    check(await own.evaluate(() =>
+              window.rv.panes.layout().kids[0].active === 0 &&
+              document.activeElement.id === 'panetab-c-a'),
+          'and an arrow key moves along them, as along a strip');
+
+    check(await own.evaluate(() =>
+          {
+              window.rv.panes.setIcon('c-b', 'data:image/svg+xml,' +
+                  encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>'));
+
+              const tab = document.getElementById('panetab-c-b');
+              const had = tab.querySelector('img.paneicon') !== null &&
+                          tab.textContent === '';
+
+              window.rv.panes.setIcon('c-b', null);
+
+              return had && tab.isConnected === false &&
+                     document.getElementById('panetab-c-b').textContent ===
+                         'C-B';
+          }),
+          'setIcon gives a tab its icon, and null takes it away');
+
+    /* The grip dragged onto the other leaf's switcher, before its first
+       tab: the switcher is a strip to drop on while a drag is in the
+       air. */
+    const grip = await own.locator('#panetab-c-c').boundingBox();
+
+    await own.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await own.mouse.down();
+    await own.mouse.move(grip.x - 40, grip.y + 60, { steps: 5 });
+
+    const first = await own.locator('#panetab-c-a').boundingBox();
+
+    await own.mouse.move(first.x + 3, first.y + first.height / 2,
+                         { steps: 8 });
+    await own.mouse.up();
+    await own.waitForTimeout(100);
+
+    check(await own.evaluate(() => window.rv.tabs()) ===
+              '[["c-c","c-a","c-b"]]',
+          'a grip dragged onto a switcher goes in before the icon under it: ' +
+          await own.evaluate(() => window.rv.tabs()));
+
+    const stripped = await own.evaluate(() =>
+    {
+        window.rv.panes.setHeader('strip');
+
+        const tab = document.getElementById('panetab-c-a');
+        const leaf = tab.closest('.paneleaf');
+
+        return {
+            corner: leaf.classList.contains('panecorner'),
+            words: tab.textContent === 'C-A' &&
+                   tab.querySelector('img.paneicon') !== null,
+            row: document.getElementById('pane-c-c').getBoundingClientRect()
+                .top > leaf.getBoundingClientRect().top,
+            shut: leaf.querySelectorAll('.paneshut').length,
+            room: leaf.style.getPropertyValue('--pane-corner'),
+        };
+    });
+
+    check(!stripped.corner && stripped.words && stripped.row &&
+          stripped.shut === 3 && stripped.room === '',
+          'setHeader("strip") puts the strip back, icon beside title and a ' +
+          `cross on every tab: ${JSON.stringify(stripped)}`);
+
+    await own.close();
+
     /* A slow storage, and a page busy while it answers. */
     own = await sandbox();
 
