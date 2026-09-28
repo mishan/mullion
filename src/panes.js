@@ -230,12 +230,35 @@ export function createPanes ({ root, catalog, layouts, mode,
     const measure = typeof ResizeObserver === 'function'
         ? new ResizeObserver((changes) =>
           {
+              /* From the leaf's edge, inset and all: what a row under
+                 them has to leave. */
               for (const e of changes)
-                  e.target.parentElement?.style.setProperty(
-                      '--pane-corner',
-                      `${Math.ceil(e.target.getBoundingClientRect().width)}px`);
+              {
+                  const box = e.target.parentElement;
+
+                  if (box === null || !e.target.isConnected)
+                      continue;
+
+                  const r = e.target.getBoundingClientRect();
+                  const b = box.getBoundingClientRect();
+                  const wide = backward(box) ? r.right - b.left
+                                             : b.right - r.left;
+
+                  box.style.setProperty('--pane-corner',
+                                        `${Math.ceil(Math.max(wide, 0))}px`);
+              }
           })
         : null;
+
+    /* The strips being measured: each observed once, and let go when its
+       leaf is not drawn any more -- an observer holds what it watches. */
+    const measured = new Set();
+
+    const unmeasure = (strip) =>
+    {
+        measure?.unobserve(strip);
+        measured.delete(strip);
+    };
 
     /* And the one number the drawing and the arithmetic share, written
        where the drawing can read it, and written again by setLayouts. */
@@ -1802,11 +1825,14 @@ export function createPanes ({ root, catalog, layouts, mode,
         box.classList.toggle('panebare', ids.length === 1 && bare(ids[0]));
         box.classList.toggle('panecorner', corner);
 
-        if (corner)
-            measure?.observe(strip);
-        else
+        if (corner && !measured.has(strip))
         {
-            measure?.unobserve(strip);
+            measure?.observe(strip);
+            measured.add(strip);
+        }
+        else if (!corner)
+        {
+            unmeasure(strip);
             box.style.removeProperty('--pane-corner');
         }
 
@@ -1887,7 +1913,13 @@ export function createPanes ({ root, catalog, layouts, mode,
             wraps.push(wrap);
 
             if (corner && front && closable(id))
-                last = shut;
+            {
+                /* In a wrapper of its own, as a strip's cross is in the
+                   tab's: a tablist's children are tabs. */
+                last = el('paneshutwrap');
+                last.setAttribute('role', 'presentation');
+                last.append(shut);
+            }
         });
 
         strip.replaceChildren(...wraps, ...(last !== null ? [last] : []));
@@ -2445,6 +2477,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             seen = new Map();
             hint = null;
             root.replaceChildren();
+            [...measured].forEach(unmeasure);
             tray.remove();
             root.classList.remove('panezoom');
             settle();
@@ -2521,6 +2554,10 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (some)
             fill(tree);
+
+        for (const strip of measured)
+            if (!seen.has(strip.parentElement))
+                unmeasure(strip);
 
         seat();
 

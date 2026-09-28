@@ -3245,8 +3245,21 @@ try
             shut: [...strip.querySelectorAll('.paneshut')].map((b) => b.id)
                       .join(),
             unseen: getComputedStyle(strip).opacity === '0',
-            room: parseFloat(leaf.style.getPropertyValue('--pane-corner')) >
-                  0,
+            /* Hidden from the pointer too: its corner is the pane's. */
+            through: (() =>
+            {
+                const r = document.getElementById('paneshut-c-a')
+                                  .getBoundingClientRect();
+
+                return document.elementFromPoint(r.x + r.width / 2,
+                                                 r.y + r.height / 2).id !==
+                       'paneshut-c-a';
+            })(),
+            room: parseFloat(leaf.style.getPropertyValue('--pane-corner')) ===
+                  Math.ceil(leaf.getBoundingClientRect().right -
+                            strip.getBoundingClientRect().left),
+            roles: [...strip.children].every(
+                (c) => c.getAttribute('role') === 'presentation'),
         };
     });
 
@@ -3257,9 +3270,12 @@ try
           `a grip for a pane alone: ${JSON.stringify(cornered)}`);
     check(cornered.shut === 'paneshut-c-a',
           `with one cross, for the pane in front: ${cornered.shut}`);
-    check(cornered.unseen && cornered.room,
-          'out of sight with the pointer elsewhere, and their width ' +
-          'written on the leaf as --pane-corner');
+    check(cornered.unseen && cornered.through,
+          'out of sight, and out of the pointer\'s way, with it elsewhere');
+    check(cornered.room,
+          'their width from the leaf\'s edge written on it as --pane-corner');
+    check(cornered.roles,
+          'and nothing in the tablist but its tabs\' wrappers');
 
     const leafBox = await own.evaluate(() =>
     {
@@ -3282,6 +3298,30 @@ try
     check(await own.evaluate(() => window.rv.panes.layout().kids[0].active)
               === 1,
           'an icon clicked raises its pane');
+
+    await own.keyboard.press('ArrowLeft');
+
+    check(await own.evaluate(() =>
+              window.rv.panes.layout().kids[0].active === 0 &&
+              document.activeElement.id === 'panetab-c-a'),
+          'and an arrow key moves along them, as along a strip');
+
+    check(await own.evaluate(() =>
+          {
+              window.rv.panes.setIcon('c-b', 'data:image/svg+xml,' +
+                  encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"/>'));
+
+              const tab = document.getElementById('panetab-c-b');
+              const had = tab.querySelector('img.paneicon') !== null &&
+                          tab.textContent === '';
+
+              window.rv.panes.setIcon('c-b', null);
+
+              return had && tab.isConnected === false &&
+                     document.getElementById('panetab-c-b').textContent ===
+                         'C-B';
+          }),
+          'setIcon gives a tab its icon, and null takes it away');
 
     /* The grip dragged onto the other leaf's switcher, before its first
        tab: the switcher is a strip to drop on while a drag is in the

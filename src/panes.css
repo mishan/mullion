@@ -265,7 +265,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     border-bottom: 2px solid transparent;
 }
 
-.panetabwrap:has(> .panetab[aria-selected="true"])
+.panetabwrap:has(> .panetab[aria-selected="true"]:not(.panegrip))
 {
     background: var(--pane-bg, #ffffff);
     border-bottom-color: var(--pane-held, AccentColor);
@@ -349,6 +349,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     z-index: 2;
     inset-block-start: 3px;
     inset-inline-end: 3px;
+    /* Kept inside a leaf narrower than they are, shrunk as a strip is. */
+    max-width: calc(100% - 6px);
     align-items: center;
     gap: 1px;
     padding: 1px;
@@ -357,11 +359,19 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
     opacity: 0;
     transition: opacity 0.12s;
+
+    /* Not there for the pointer while it is not there for the eye: a
+       click on a pane's corner is the pane's until the controls show. */
+    pointer-events: none;
 }
 
 .panecorner:hover > .panetabs,
 .panecorner:focus-within > .panetabs,
-.panesroot.panedrag .panecorner > .panetabs { opacity: 1; }
+.panesroot.panedrag .panecorner > .panetabs
+{
+    opacity: 1;
+    pointer-events: auto;
+}
 
 @media (prefers-reduced-motion: reduce)
 {
@@ -385,7 +395,9 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 .panecorner .panetab.panegrip { cursor: grab; }
 
-.panecorner > .panetabs > .paneshut
+.panecorner > .panetabs > .paneshutwrap { display: flex; }
+
+.panecorner > .panetabs > .paneshutwrap > .paneshut
 {
     visibility: visible;
     padding: 0.2em 0.4em;
