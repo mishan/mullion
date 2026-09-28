@@ -374,7 +374,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     border-radius: 3px;
 }
 
-.panecorner .panetabwrap:has(> .panetab[aria-selected="true"])
+.panecorner .panetabwrap:has(> .panetab[aria-selected="true"]:not(.panegrip))
 {
     background: color-mix(in srgb, var(--pane-held, AccentColor) 18%, transparent);
 }
