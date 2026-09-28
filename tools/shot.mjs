@@ -11,10 +11,12 @@
  *   npm install && npx playwright install chromium
  *   node tools/shot.mjs            # needs ffmpeg on the PATH for the gif
  *
- * The server, the page errors, the pointer and captions, the cut and the
- * gif are shotbox's: the pieces several projects had copied. The browser
- * runs in shotbox's seal, so a font or an alias in your home does not
- * make these pictures differ from anybody else's.
+ * The server, the page errors, the pointer and captions, the frames and
+ * the gif are shotbox's: the pieces several projects had copied. The
+ * browser runs in shotbox's seal, so a font or an alias in your home does
+ * not make these pictures differ from anybody else's, and the loop is
+ * made a frame at a time on the page's own clock, so two runs make the
+ * same gif.
  *
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
@@ -42,7 +44,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import { dress, film, gif, pageErrors, sealed, serve } from 'shotbox';
+import { dress, frames, gif, pageErrors, sealed, serve, steady } from 'shotbox';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(here, '..', 'demo');
@@ -65,16 +67,29 @@ process.on('exit', () =>
     for (const dir of [films, seal.dir])
         rmSync(dir, { recursive: true, force: true });
 });
-const browser = await chromium.launch({ env: seal.env });
+const browser = await chromium.launch({ env: seal.env, args: steady });
+
+/* Until the page says so. `advance' moves the page's time on, for a page
+   whose clock is not its own. */
+const until = async (page, test, advance = (ms) => page.waitForTimeout(ms)) =>
+{
+    for (let i = 0; i < 100; i++)
+    {
+        if (await page.evaluate(test).catch(() => false))
+            return;
+        await advance(100);
+    }
+    throw new Error(`the page never said so: ${test}`);
+};
 
 /* The page as a first visit finds it: no edits, no layouts, no mode. */
-const fresh = async (page) =>
+const fresh = async (page, advance) =>
 {
     await page.goto(base);
-    await page.waitForFunction(() => window.playground !== undefined);
+    await until(page, () => window.playground !== undefined, advance);
     await page.evaluate(() => localStorage.clear());
     await page.reload();
-    await page.waitForFunction(() => window.playground?.tiled());
+    await until(page, () => window.playground?.tiled(), advance);
 };
 
 /* ---- the picture a link is shown with ---- */
@@ -92,29 +107,25 @@ const fresh = async (page) =>
 
 /* ---- the loop ---- */
 
-const context = await browser.newContext({
-    viewport: SIZE,
-    deviceScaleFactor: 1,
-    recordVideo: { dir: films, size: SIZE },
-});
-
+/* A frame at a time, on the page's own clock, so that two runs make the
+   same gif: see shotbox's frames(). Every wait below is page time, and
+   the pointer moves a step a frame. */
+const context = await browser.newContext({ viewport: SIZE,
+                                           deviceScaleFactor: 1 });
 const page = await context.newPage();
-const reel = film(page);
+const rec = await frames(page, { fps: FPS, dir: films });
 const errors = pageErrors(page);
 
-await fresh(page);
+await fresh(page, (ms) => rec.run(ms));
 
 const dressing = await dress(page);
 
-/* The recording starts with the page, and the loop with the layout: what
-   came before it -- a blank page, the plain one, a reload -- is cut. */
-await page.waitForTimeout(600);
+/* The loop starts with the layout: the plain page and the reload before
+   it are page time with nothing kept. */
+await rec.run(600);
+rec.start();
 
-reel.start();
-
-await page.waitForTimeout(600);
-
-const wait = (ms) => page.waitForTimeout(ms);
+const wait = (ms) => rec.hold(ms);
 
 const at = async (target, where = { x: 0.5, y: 0.5 }) =>
 {
@@ -127,7 +138,7 @@ const to = async (target, where) =>
 {
     const p = await at(target, where);
 
-    await page.mouse.move(p.x, p.y, { steps: 24 });
+    await rec.move(p.x, p.y, 400);
 };
 
 const click = async (target, where) =>
@@ -180,9 +191,9 @@ await wait(900);
 await to('#root > .panebox > .panesplit');
 await wait(300);
 await page.mouse.down();
-await page.mouse.move(SIZE.width * 0.62, SIZE.height / 2, { steps: 20 });
+await rec.move(SIZE.width * 0.62, SIZE.height / 2, 350);
 await wait(250);
-await page.mouse.move(SIZE.width * 0.5, SIZE.height / 2, { steps: 20 });
+await rec.move(SIZE.width * 0.5, SIZE.height / 2, 350);
 await page.mouse.up();
 await wait(700);
 
@@ -200,7 +211,7 @@ await click('[data-mode="write"]');
 await wait(900);
 
 /* Back where it started, so the loop closes. */
-await page.mouse.move(SIZE.width * 0.5, SIZE.height * 0.45, { steps: 20 });
+await rec.move(SIZE.width * 0.5, SIZE.height * 0.45, 350);
 await press('Alt+Digit0', 'Alt  0 — start over');
 await wait(1400);
 
@@ -217,7 +228,7 @@ if (errors.length > 0)
 await dressing.remove();
 await page.screenshot({ path: path.join(out, 'mullion.png') });
 
-const video = await reel.end();
+const reel = await rec.end();
 
 await browser.close();
 site.close();
@@ -225,9 +236,8 @@ site.close();
 /* Sixty-four colors of its own are plenty for a page of flat grays, and
    undithered: the preview animates every frame, and a dither pattern
    over it is noise the gif pays for each time. */
-await gif(video, path.join(out, 'mullion.gif'),
-          { width: WIDE, fps: FPS, from: reel.from, colors: 64,
-            dither: 'none' });
+await gif(reel.dir, path.join(out, 'mullion.gif'),
+          { width: WIDE, fps: FPS, colors: 64, dither: 'none' });
 
 for (const name of ['mullion.gif', 'mullion.png', 'og.png'])
 {
