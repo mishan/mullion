@@ -26,6 +26,7 @@
  * Exit status is the number of failures.
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -3525,6 +3526,91 @@ try
               window.rv.panes.setLayout({ tabs: ['o-later'] }) === false),
           'setLayout refuses a layout of nothing but places kept for panes ' +
           'still to come');
+
+    await own.close();
+    }
+
+    /* ---- the layout cases, which are every implementation's ----
+     *
+     * test/layouts.json, from tools/layouts.mjs: a page's panes and a
+     * layout kept for it, and what reading it back gives, including what
+     * is refused. Here in mullion and in anything else that implements
+     * the model (docs/layout.md), so the two are held to one list. And
+     * what each one is kept as, byte for byte, so that a layout kept by
+     * one is read by the other.
+     */
+    {
+    const { cases } = JSON.parse(fs.readFileSync(
+        path.join(here, 'layouts.json'), 'utf8'));
+    const own = await browser.newPage({ viewport: WIDE });
+
+    own.on('pageerror', (e) => errors.push(e.message));
+    await own.goto(`${base}?panes=0`);
+    await own.waitForFunction(() => window.tiler !== undefined);
+
+    const results = await own.evaluate(async (list) =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+
+        return list.map((c) =>
+        {
+            const root = document.createElement('div');
+            const writes = [];
+            const boxes = c.panes.map((id) =>
+            {
+                const el = document.createElement('section');
+
+                el.id = id;
+                el.dataset.pane = '';
+                el.dataset.paneMin = '0';
+
+                return el;
+            });
+
+            document.body.append(root, ...boxes);
+
+            const panes = createPanes({
+                root, catalog: c.panes, mode: 'm', version: c.version,
+                on: true, media: 'all', param: 'layout-cases',
+                later: (id) => (c.later ?? []).includes(id),
+                storage: { getItem: () => c.stored,
+                           setItem: (k, v) => writes.push(v),
+                           removeItem: () => {} },
+            });
+
+            const read = JSON.stringify(panes.layout());
+
+            /* What it is kept as: put up by the page, after another, so
+               that it is a change and is written. The other is one no
+               case expects, and each put has to take. */
+            const put = [
+                panes.setLayout({ dir: 'row', size: [0.3, 0.7],
+                                  kids: [{ tabs: [c.panes[0]] },
+                                         { tabs: [c.panes[1]] }] }),
+                panes.setLayout(c.expect),
+            ];
+
+            const kept = put.every(Boolean) ? writes.at(-1)
+                       : `(setLayout refused: ${put})`;
+
+            panes.destroy();
+            root.remove();
+            boxes.forEach((b) => b.remove());
+
+            return { name: c.name, read, kept };
+        });
+    }, cases);
+
+    results.forEach((r, i) =>
+    {
+        const c = cases[i];
+
+        check(r.read === JSON.stringify(c.expect) && r.kept === c.written,
+              `layout case: ${c.name}` +
+              (r.read === JSON.stringify(c.expect) ? ''
+                  : ` (read ${r.read})`) +
+              (r.kept === c.written ? '' : ` (kept ${r.kept})`));
+    });
 
     await own.close();
     }

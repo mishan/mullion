@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **The layout, written down.** [docs/layout.md](docs/layout.md) says
+  what a layout may hold, how a kept one is read back, and what is kept,
+  byte for byte, so another implementation of the model can read the
+  layouts mullion keeps. `test/layouts.json` has 60 cases, run in the
+  suite, for that implementation to run too. `floating` and `zoom` are
+  reserved as envelope fields.
+
+### Fixed
+
+- **A share of `1e999` in a kept layout** was read as Infinity, put up,
+  and written back as `null`, which does not read back: the layout reset
+  itself on the next visit. A share has to be finite, and one that is not
+  refuses the layout.
+
 ## 0.3.0 — 2026-09-24
 
 A page can now add and remove panes while it is up, keep its layouts on a

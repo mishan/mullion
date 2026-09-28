@@ -576,7 +576,10 @@ export function createPanes ({ root, catalog, layouts, mode,
               Array.isArray(node.kids) && node.kids.length > 1 &&
               Array.isArray(node.size) &&
               node.size.length === node.kids.length &&
-              node.size.every((f) => typeof f === 'number' && f > 0) &&
+              /* Finite: JSON.parse reads 1e999 as Infinity, and a layout
+                 with an Infinity in it is written back with a null there,
+                 which is then no layout at all. */
+              node.size.every((f) => Number.isFinite(f) && f > 0) &&
               node.kids.every(sane));
 
     /* And a pane this page has never heard of, dropped -- which is not an
