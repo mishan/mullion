@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "playwright": "1.63.0",
-    "shotbox": "github:mishan/shotbox",
+    "shotbox": "github:mishan/shotbox#frames",
     "typescript": "5.9.3"
   }
 }
