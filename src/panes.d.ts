@@ -94,6 +94,13 @@ export interface PanesOptions {
    *  Prefer the list: a leaf with no strip cannot be dragged or closed
    *  except by the chords. */
   lone?: boolean | string[];
+  /** Where a leaf's tabs are: a strip across its top, or `corner`: tucked
+   *  into its top corner over the pane, seen while the pointer or the focus
+   *  is in the leaf -- the panes' icons (the title where one has none), a
+   *  grip for a pane alone, and a cross for the one in front. Their width
+   *  is written on the leaf as `--pane-corner`, for a pane's own first row
+   *  to leave room for them. */
+  header?: 'strip' | 'corner';
   /** What the drawer of closed panes is labelled. */
   closed?: string;
   /** Where the closed panes are listed: a row above the layout (`null`),
@@ -216,6 +223,12 @@ export interface Panes {
   remove(id: string): HTMLElement | null;
   /** What its tab says. */
   setTitle(id: string, text: string): void;
+  /** The image its tab shows beside the title, or in place of it in the
+   *  corner: a URL, or null for none. `data-pane-icon` in the markup. */
+  setIcon(id: string, src: string | null): void;
+  /** Where the tabs are, once it is up: for a page that offers the
+   *  titles back, or takes them away. */
+  setHeader(kind: 'strip' | 'corner'): void;
   /** Whether a layout is up at all. */
   tiled(): boolean;
   /** Another set of layouts, in place: the layout that is up stays kept

@@ -74,7 +74,8 @@
  * a leaf's edge is an edge (`edge'), the query parameter that turns it
  * on (`param'), where a layout is kept (`storage'), the chords (`keys'),
  * how a strip too narrow for its tabs takes them (`strip'), which panes
- * alone in a leaf go without one (`lone'), the drawer's label (`closed')
+ * alone in a leaf go without one (`lone'), whether the tabs are a strip
+ * or tucked into a corner (`header'), the drawer's label (`closed')
  * and a button to start over (`reset'). None of them is a rule -- they
  * are what this page would have hardcoded, written where somebody else
  * can disagree.
@@ -177,6 +178,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                                edge = EDGE, param = 'panes',
                                storage = KEEP, keys = {},
                                strip = 'shrink', lone = true,
+                               header = 'strip',
                                closed: label = 'Closed:',
                                drawer: shelf = null,
                                reset: again = null,
@@ -210,6 +212,30 @@ export function createPanes ({ root, catalog, layouts, mode,
     root.classList.toggle('panescroll', strip === 'scroll');
 
     const bare = (id) => (Array.isArray(lone) ? lone.includes(id) : !lone);
+
+    /* Where a leaf's tabs are: a strip across its top, or tucked into its
+       top corner over the pane, out of sight until the pointer or the
+       focus is in the leaf. The corner is for an app whose panes say what
+       they are well enough on their own, and whose every row of height
+       counts: a switcher of icons, a grip to drag the pane by when it is
+       alone, and a cross. Changed later by `setHeader', which is how a
+       page offers the titles back. */
+    let corner = header === 'corner';
+
+    /* How wide the corner's controls are, written onto the leaf as
+       `--pane-corner', for a pane whose own first row wants to leave
+       them room -- a toolbar that would otherwise run under them. Asked
+       of the browser as it lays them out, since only it knows how wide
+       an icon or a title comes out. */
+    const measure = typeof ResizeObserver === 'function'
+        ? new ResizeObserver((changes) =>
+          {
+              for (const e of changes)
+                  e.target.parentElement?.style.setProperty(
+                      '--pane-corner',
+                      `${Math.ceil(e.target.getBoundingClientRect().width)}px`);
+          })
+        : null;
 
     /* And the one number the drawing and the arithmetic share, written
        where the drawing can read it, and written again by setLayouts. */
@@ -291,6 +317,10 @@ export function createPanes ({ root, catalog, layouts, mode,
         const p = {
             id, el, summary,
             title: el.dataset.paneTitle ?? summary?.textContent.trim() ?? id,
+
+            /* A picture of it, for a tab with no room for words: the
+               corner's switcher, and beside the title in a strip. */
+            icon: el.dataset.paneIcon ?? null,
             min: floor >= 0 ? floor : 240,
 
             /* Where it came from. A remembered sibling is no address:
@@ -1704,6 +1734,49 @@ export function createPanes ({ root, catalog, layouts, mode,
             stale.push([box, extra]);
     };
 
+    /* What a tab shows. In a strip, the title, after the pane's icon if
+     * it has one. In the corner, the icon alone -- the title where there
+     * is none -- and the title as its name and its tooltip; and for a pane
+     * alone in its leaf, where there is nothing to switch to, a grip: it
+     * is still the tab, which is what the pane is dragged by and what the
+     * keyboard lands on, and an icon there would be a switcher of one.
+     */
+    const face = (tab, p, n) =>
+    {
+        const alone = corner && n === 1;
+        const mute = corner && !alone && p.icon !== null;
+
+        tab.replaceChildren();
+        tab.classList.toggle('panegrip', alone);
+
+        if (p.icon !== null && !alone)
+        {
+            const img = document.createElement('img');
+
+            img.className = 'paneicon';
+            img.src = p.icon;
+            img.alt = '';
+            img.draggable = false;
+            tab.append(img);
+        }
+
+        if (alone)
+            tab.append('\u283f');
+        else if (!mute)
+            tab.append(p.title);
+
+        if (corner)
+        {
+            tab.title = alone ? `Move ${p.title}` : p.title;
+            tab.setAttribute('aria-label', p.title);
+        }
+        else
+        {
+            tab.removeAttribute('title');
+            tab.removeAttribute('aria-label');
+        }
+    };
+
     /* A leaf: a strip of tabs and a host per pane, with the one in front
      * shown and the rest beside it, hidden.
      *
@@ -1724,8 +1797,18 @@ export function createPanes ({ root, catalog, layouts, mode,
         const box = elementFor(leaf);
         const strip = box.firstElementChild;
         const wraps = [];
+        let last = null;
 
         box.classList.toggle('panebare', ids.length === 1 && bare(ids[0]));
+        box.classList.toggle('panecorner', corner);
+
+        if (corner)
+            measure?.observe(strip);
+        else
+        {
+            measure?.unobserve(strip);
+            box.style.removeProperty('--pane-corner');
+        }
 
         leaf.active = Math.min(Math.max(leaf.active ?? 0, 0), ids.length - 1);
 
@@ -1759,7 +1842,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             tab.type = 'button';
             tab.className = 'panetab';
             tab.id = `panetab-${id}`;
-            tab.textContent = p.title;
+            face(tab, p, ids.length);
             tab.setAttribute('role', 'tab');
             tab.setAttribute('aria-controls', host.id);
             tab.setAttribute('aria-selected', String(front));
@@ -1797,12 +1880,17 @@ export function createPanes ({ root, catalog, layouts, mode,
                 place(box, host);
 
             /* No cross for a pane nothing here can close: an ephemeral
-               one on a page that has not said how it ends. */
-            wrap.append(tab, ...(closable(id) ? [shut] : []));
+               one on a page that has not said how it ends. In the corner,
+               one cross for the pane in front, after the switcher rather
+               than inside it, where it closes that one and no other. */
+            wrap.append(tab, ...(closable(id) && !corner ? [shut] : []));
             wraps.push(wrap);
+
+            if (corner && front && closable(id))
+                last = shut;
         });
 
-        strip.replaceChildren(...wraps);
+        strip.replaceChildren(...wraps, ...(last !== null ? [last] : []));
 
         box.style.minWidth = `${minAcross(leaf, true)}px`;
         box.style.minHeight = `${least}px`;
@@ -2175,7 +2263,8 @@ export function createPanes ({ root, catalog, layouts, mode,
             (isLeaf(node)
                 ? (liveTabs(node).length > 0 &&
                    (zoom === null || zoom === node) &&
-                   !elementFor(node).classList.contains('panebare')
+                   !elementFor(node).classList.contains('panebare') &&
+                   !corner
                     ? node : null)
                 : liveKids(node).reduce((f, k) => f ?? shows(k), null));
         const leaf = tree !== null && alive(tree) ? shows(tree) : null;
@@ -3130,6 +3219,31 @@ export function createPanes ({ root, catalog, layouts, mode,
             render();
         },
 
+        /* What its tab shows beside the title, or instead of it in the
+           corner: an image's URL, or null for none. */
+        setIcon: (id, src) =>
+        {
+            const p = panes.get(id);
+
+            if (dead || p === undefined)
+                return;
+
+            p.icon = src ?? null;
+            render();
+        },
+
+        /* Where the tabs are: `strip' across each leaf, or `corner' over
+           it. For a page that offers the titles back, or takes them away,
+           once it is up. */
+        setHeader: (kind) =>
+        {
+            if (dead || (kind === 'corner') === corner)
+                return;
+
+            corner = kind === 'corner';
+            render();
+        },
+
         tiled: () => tiled,
 
         /* Another set of layouts, in place: the layout that is up is kept
@@ -3185,6 +3299,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             dead = true;
             window.removeEventListener('keydown', command);
+            measure?.disconnect();
             document.removeEventListener('visibilitychange', settle);
             document.removeEventListener('scroll', noteScroll, true);
             screen.removeEventListener('change', apply);

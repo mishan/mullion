@@ -139,6 +139,7 @@ is still wrong; the arrows are the arrows.
 | `data-pane` | this element is a pane |
 | `data-pane-title` | what its tab says (a `<details>`'s `<summary>` otherwise) |
 | `data-pane-min` | how narrow a divider may make it, in pixels (240) |
+| `data-pane-icon` | an image for its tab: beside the title in a strip, in place of it in the corner |
 | `data-pane-off` | this pane's mode is not up — set it, or call `available()` |
 
 `data-pane-off` and not `hidden`, deliberately: `hidden` is a word most
@@ -170,6 +171,7 @@ Everything below is a default rather than a rule.
 | `keys` | the commands, merged over the defaults | `Alt` chords |
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
 | `lone` | whether a leaf with one tab has a tab strip: `false` for none, or the ids of the panes that go without one | `true` |
+| `header` | where the tabs are: a strip across each leaf, or `'corner'`, over its top corner (see [Styling](#styling)) | `'strip'` |
 | `closed` | the drawer's label | `'Closed:'` |
 | `drawer` | where the closed panes are listed: a row above the layout (`null`), an element of yours such as a side menu, or nowhere (`false`) | `null` |
 | `reset` | label for a button that starts the layout over, at the end of the first tab strip (the drawer's row when every leaf is bare) | `null` |
@@ -179,6 +181,7 @@ Everything below is a default rather than a rule.
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
+`setIcon(id, src)`, `setHeader(kind)`,
 `add(id, { near, focus, keep })`, `remove(id)`, `panes()`,
 `layout()`, `setLayout(layout)`, `reset()`, `overlay()`, `tiled()`,
 `setLayouts(layouts, { store, split, version })`, `destroy()`.
@@ -492,6 +495,18 @@ are ordinary class selectors, so at equal specificity the later rule wins.
 `--pane-height` is the layout's height, `100dvh` by default. A page that
 tracks `visualViewport` — because `dvh` is wrong the moment an on-screen
 keyboard appears — should set this instead.
+
+With `header: 'corner'` there is no strip: a leaf's tabs sit over its top
+corner, in sight while the pointer or the focus is in the leaf or a tab
+is being dragged. They are the panes' icons (`data-pane-icon`; the title
+for a pane without one), a grip for a pane alone in its leaf, and a cross
+for the one in front, and they drag, drop and take the arrow keys as a
+strip does. Laid over the pane, they cover whatever its first row has in
+that corner, so the leaf carries their width as `--pane-corner`:
+
+```css
+.panecorner .toolbar { margin-inline-end: var(--pane-corner, 0); }
+```
 
 ## Popovers
 

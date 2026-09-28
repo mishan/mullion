@@ -317,6 +317,80 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 .paneshut:hover { color: var(--pane-fg, #202020); }
 
+/* A pane's icon, beside its title in a strip. */
+.paneicon
+{
+    width: 1.15em;
+    height: 1.15em;
+    object-fit: contain;
+    vertical-align: -0.2em;
+    margin-inline-end: 0.35em;
+    pointer-events: none;
+}
+
+/* ---- the corner ----
+ *
+ * `header: "corner"' in panes.js: no strip across the leaf, and the same
+ * tabs tucked into its top corner over the pane instead -- icons for the
+ * panes sharing the leaf, a grip for one alone in it, and a cross for
+ * the one in front. Out of sight until the pointer or the focus is in
+ * the leaf, or a tab is being dragged and might be dropped there; the
+ * pane has the whole of the leaf, and the controls cost it no row.
+ *
+ * Laid over the pane rather than beside it, so a pane whose first row
+ * has something in that corner makes room for them: panes.js writes how
+ * wide they are onto the leaf as `--pane-corner'.
+ */
+.paneleaf.panecorner { position: relative; }
+
+.panecorner > .panetabs
+{
+    position: absolute;
+    z-index: 2;
+    inset-block-start: 3px;
+    inset-inline-end: 3px;
+    align-items: center;
+    gap: 1px;
+    padding: 1px;
+    border: 1px solid var(--pane-line, #dcdcdc);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.panecorner:hover > .panetabs,
+.panecorner:focus-within > .panetabs,
+.panesroot.panedrag .panecorner > .panetabs { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce)
+{
+    .panecorner > .panetabs { transition: none; }
+}
+
+.panecorner .panetabwrap
+{
+    border: 0;
+    border-radius: 3px;
+}
+
+.panecorner .panetabwrap:has(> .panetab[aria-selected="true"])
+{
+    background: color-mix(in srgb, var(--pane-held, AccentColor) 18%, transparent);
+}
+
+.panecorner .panetab { padding: 0.2em 0.4em; }
+
+.panecorner .panetab > .paneicon { margin: 0; }
+
+.panecorner .panetab.panegrip { cursor: grab; }
+
+.panecorner > .panetabs > .paneshut
+{
+    visibility: visible;
+    padding: 0.2em 0.4em;
+}
+
 /* ---- the drawer ----
  *
  * The panes no leaf has room for. A closed pane is put away and not lost,
