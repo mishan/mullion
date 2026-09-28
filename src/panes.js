@@ -344,6 +344,10 @@ export function createPanes ({ root, catalog, layouts, mode,
             /* A picture of it, for a tab with no room for words: the
                corner's switcher, and beside the title in a strip. */
             icon: el.dataset.paneIcon ?? null,
+
+            /* Whether its corner stays in sight while it is in front, for
+               a pane whose first row makes room for it (setCornerPinned). */
+            pinned: false,
             min: floor >= 0 ? floor : 240,
 
             /* Where it came from. A remembered sibling is no address:
@@ -1837,6 +1841,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
 
         leaf.active = Math.min(Math.max(leaf.active ?? 0, 0), ids.length - 1);
+        box.classList.toggle('panepinned',
+                             corner && panes.get(ids[leaf.active])?.pinned === true);
 
         /* Which host is shown, settled for all of them before any is
            moved. A host hidden after another has been moved in beside it
@@ -3266,6 +3272,21 @@ export function createPanes ({ root, catalog, layouts, mode,
                 return;
 
             p.icon = src ?? null;
+            render();
+        },
+
+        /* Whether a pane's corner stays in sight while it is in front of
+           its leaf, rather than only while the pointer or the focus is
+           there: for a pane whose first row makes room for it
+           (`--pane-corner'), where it covers nothing. */
+        setCornerPinned: (id, on) =>
+        {
+            const p = panes.get(id);
+
+            if (dead || p === undefined || p.pinned === Boolean(on))
+                return;
+
+            p.pinned = Boolean(on);
             render();
         },
 

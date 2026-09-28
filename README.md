@@ -181,7 +181,7 @@ Everything below is a default rather than a rule.
 
 And the handle it returns: `available(id, on)`, `mode(name)`,
 `visible(id)`, `present(id, { focus })`, `close(id)`, `setTitle(id, text)`,
-`setIcon(id, src)`, `setHeader(kind)`,
+`setIcon(id, src)`, `setHeader(kind)`, `setCornerPinned(id, on)`,
 `add(id, { near, focus, keep })`, `remove(id)`, `panes()`,
 `layout()`, `setLayout(layout)`, `reset()`, `overlay()`, `tiled()`,
 `setLayouts(layouts, { store, split, version })`, `destroy()`.
@@ -507,6 +507,9 @@ that corner, so the leaf carries their width as `--pane-corner`:
 ```css
 .panecorner .toolbar { margin-inline-end: var(--pane-corner, 0); }
 ```
+
+A pane that has made that room can keep its corner in sight while it is
+in front, where it covers nothing: `setCornerPinned(id, true)`.
 
 ## Popovers
 

@@ -3323,6 +3323,47 @@ try
           }),
           'setIcon gives a tab its icon, and null takes it away');
 
+    /* Pinned: in sight with the pointer elsewhere, while the pinned pane
+       is in front of its leaf and not while another is. */
+    await own.mouse.move(1300, 800);        /* over the other leaf */
+    await own.evaluate(() => document.activeElement?.blur());
+
+    const opacity = () => own.evaluate(() => getComputedStyle(
+        document.querySelector('#panetab-c-a').closest('.panetabs')).opacity);
+    const settled = (want) => own.waitForFunction((w) => getComputedStyle(
+        document.querySelector('#panetab-c-a').closest('.panetabs'))
+        .opacity === w, want, { timeout: 2000 }).then(() => true, () => false);
+
+    const unpinned = await settled('0');
+
+    await own.evaluate(() =>
+    {
+        window.rv.panes.setCornerPinned('c-a', true);
+        window.rv.panes.present('c-a', { focus: false });
+    });
+
+    const pinnedShown = await settled('1');
+
+    await own.evaluate(() => window.rv.panes.present('c-b', { focus: false }));
+
+    const behind = await settled('0');
+
+    /* And let go, in front again: out of sight. The pin is left off, and
+       c-a in front, for the checks after this one. */
+    await own.evaluate(() => window.rv.panes.present('c-a', { focus: false }));
+
+    const again = await settled('1');
+
+    await own.evaluate(() => window.rv.panes.setCornerPinned('c-a', false));
+
+    const unpinnedAgain = await settled('0');
+
+    check(unpinned && pinnedShown && behind && again && unpinnedAgain,
+          'setCornerPinned keeps a corner in sight while its pane is in ' +
+          'front, not behind another, and not once let go: ' +
+          `${unpinned} ${pinnedShown} ${behind} ${again} ${unpinnedAgain} ` +
+          `${await opacity()}`);
+
     /* The grip dragged onto the other leaf's switcher, before its first
        tab: the switcher is a strip to drop on while a drag is in the
        air. */
