@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 import { chromium, firefox, webkit } from 'playwright';
 
-import { serve } from './serve.mjs';
+import { checks, serve } from 'shotbox';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const name = process.argv[2] ?? process.env.BROWSER ?? 'chromium';
@@ -38,18 +38,9 @@ if (!(name in engines))
     process.exit(1);
 }
 
-let failures = 0;
-
-function check (cond, what)
-{
-    if (cond)
-        process.stdout.write(`ok    ${what}\n`);
-    else
-    {
-        failures++;
-        process.stdout.write(`FAIL  ${what}\n`);
-    }
-}
+/* ok and FAIL, a line each, and the count of failures. */
+const tally = checks();
+const { check } = tally;
 
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
@@ -427,4 +418,4 @@ check(errors.length === 0,
       errors.length === 0 ? 'and the page raised nothing'
                           : `the page raised: ${errors.join(' | ')}`);
 
-process.exitCode = failures;
+process.exitCode = tally.failures;

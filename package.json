@@ -26,7 +26,7 @@
     "test": "node test/check.mjs",
     "test:demo": "node test/demo.mjs",
     "types": "tsc",
-    "demo": "node test/serve.mjs",
+    "demo": "shotbox-serve . 8080 demo/",
     "shot": "node tools/shot.mjs"
   },
   "devDependencies": {
