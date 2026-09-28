@@ -26,13 +26,16 @@ A node is a **leaf** when `tabs` is an array, and a **split** otherwise.
   A place kept for a pane still to come, or a pane whose mode is down, is
   in `tabs` and is not counted. Absent means 0.
 - Once a leaf is drawn, `active` is clamped to the tabs in play, and the
-  clamped value is what the layout holds from then on.
+  clamped value is what the layout holds from then on. A leaf is drawn
+  when the layout is tiled and the leaf has a tab in play; one that is not
+  (a leaf of nothing but places kept) keeps the `active` it was read with,
+  clamped to its last tab. The cases assume a tiled layout.
 
 **A split** lays its children out side by side (`row`: dividers upright)
 or stacked (`col`), in order.
 
 - `kids` has two children or more.
-- `size` has one number for each child, greater than 0. They are
+- `size` has one number for each child, finite and greater than 0. They are
   **shares, not fractions**: `[1, 1, 2]` gives the last child half. What
   is drawn is each share over the sum of the shares of the children that
   have anything in play, so a child whose panes are all away takes no
@@ -50,8 +53,20 @@ tree does not hold.
 
 The tree, as `JSON.stringify` writes it: no white space, keys in the
 order above (`tabs`, `active`; `dir`, `size`, `kids`), every leaf with
-its `active`, numbers in the shortest form that reads back as the same
-double (`0.5`, `1`, `0.3333333333333333`).
+its `active`.
+
+- **Numbers** as JavaScript writes them (ECMA-262, Number::toString): the
+  fewest digits that read back as the same double, plain between 1e-6
+  and 1e21 (`0.5`, `1`, `0.000001`, `100000000000000000000`,
+  `0.3333333333333333`) and with an exponent outside it (`1e-7`,
+  `1e+21`, `1.5e-7`). Not C's `%g`, which writes `1e-07`.
+- **Strings** as JSON.stringify quotes them: `"` and `\` escaped;
+  backspace, form feed, newline, carriage return and tab as `\b \f \n
+  \r \t`; every other character below U+0020 as `\u00XX` in lowercase
+  hex; everything else as itself, `/`, U+2028 and U+2029 included.
+
+With every pane closed there is no leaf to write, and what is kept is
+`{"tabs":[]}` (no `active`), which reads back as no layout.
 
 A page that gives a `version` keeps the tree in an envelope:
 
@@ -59,11 +74,15 @@ A page that gives a `version` keeps the tree in an envelope:
 {"version":2,"layout":{"tabs":["a","b"],"active":0}}
 ```
 
-The version is any JSON value, and compares as one: `2` is not `"2"`.
+The version is a number or a string (or `true`, `false`, `null`), and a
+kept one matches the page's when they are the same value: `2` is not
+`"2"`, and `2.0` is `2`. An object or an array never matches, since
+mullion compares with `===`.
 
 Names reserved for the envelope, which a reader ignores until it knows
 them: `floating` (panes in windows of their own, on a desktop), `zoom`
-(the pane filling the layout). A reader that does not know a field
+(the pane filling the layout). There is an envelope only where there is
+a version, so these are only kept by a page that gives one. A reader that does not know a field
 ignores it, so an older one opens a newer layout with those panes in the
 drawer.
 
@@ -71,16 +90,20 @@ drawer.
 
 Two passes, and the first is all or nothing.
 
-**1. Is it a layout at all?** Parse the text as JSON. With a version,
+**1. Is it a layout at all?** Parse the text as JSON, as JSON.parse
+does: an empty text, a byte order mark before it and anything but white
+space after it are no JSON; a key written twice is the last one written. With a version,
 take `layout` from the envelope, and only if the envelope's `version`
 equals the page's; without one, the value itself. Then check the shape
 of the whole tree:
 
 - a leaf: `tabs` is an array of strings; `active`, if present, is a whole
-  number, 0 or more (`1.0` is a whole number, `1.5` and `"1"` are not);
+  number, 0 or more (`1.0` is a whole number; `1.5`, `"1"` and `null` are
+  not);
 - a split: `dir` is `"row"` or `"col"`; `kids` is an array of two or more
-  nodes, each of which passes; `size` is an array of numbers greater than
-  0, as long as `kids`.
+  nodes, each of which passes; `size` is an array of finite numbers
+  greater than 0, as long as `kids` (`1e999` reads as Infinity, and is not
+  one).
 
 Anything else, anywhere in the tree, and there is no layout: the text is
 not JSON, the value is not an object, a share is 0, one child is wrong.
@@ -99,14 +122,16 @@ A layout half read is worse than the page's default.
 If nothing is left, or what is left holds only places for panes still to
 come, there is no layout.
 
-**No layout** means the page's own default for the mode comes up (read
-through step 2 as well), and with no default, every pane in one leaf in
-the page's order.
+**No layout** means the page's own default for the mode comes up, read
+through step 2 and nothing else: a default that names only places for
+panes to come is put up as it is, with nothing in play. With no default,
+or one that keeps nothing, every pane comes up in one leaf, in the order
+the page listed them (its catalog, then the panes it added).
 
 ## The cases
 
 `test/layouts.json` is generated by `tools/layouts.mjs` from the list
-there; `npm test` fails if it is out of date. Each case is:
+there, 60 cases; `npm test` fails if it is out of date. Each case is:
 
 | field | |
 |---|---|

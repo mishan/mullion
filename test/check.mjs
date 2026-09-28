@@ -3581,13 +3581,17 @@ try
             const read = JSON.stringify(panes.layout());
 
             /* What it is kept as: put up by the page, after another, so
-               that it is a change and is written. */
-            panes.setLayout({ dir: 'row', size: [0.3, 0.7],
-                              kids: [{ tabs: [c.panes[0]] },
-                                     { tabs: [c.panes[1]] }] });
-            panes.setLayout(c.expect);
+               that it is a change and is written. The other is one no
+               case expects, and each put has to take. */
+            const put = [
+                panes.setLayout({ dir: 'row', size: [0.3, 0.7],
+                                  kids: [{ tabs: [c.panes[0]] },
+                                         { tabs: [c.panes[1]] }] }),
+                panes.setLayout(c.expect),
+            ];
 
-            const kept = writes.at(-1);
+            const kept = put.every(Boolean) ? writes.at(-1)
+                       : `(setLayout refused: ${put})`;
 
             panes.destroy();
             root.remove();
