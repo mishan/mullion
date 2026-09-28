@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 
 import * as playwright from 'playwright';
 
-import { serve } from './serve.mjs';
+import { checks, serve } from 'shotbox';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,24 +52,9 @@ if (!['chromium', 'firefox', 'webkit'].includes(name))
     process.exit(1);
 }
 
-let failures = 0;
-
-function check (cond, what)
-{
-    if (cond)
-        process.stdout.write(`ok    ${what}\n`);
-    else
-    {
-        failures++;
-        process.stdout.write(`FAIL  ${what}\n`);
-    }
-}
-
-/* A claim this browser has no way to test, said rather than passed. */
-function skip (what)
-{
-    process.stdout.write(`skip  ${what}\n`);
-}
+/* ok, FAIL and skip, a line each, and the count of failures. */
+const tally = checks();
+const { check, skip } = tally;
 
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/test/fixture/index.html`;
@@ -3558,9 +3543,9 @@ check(errors.length === 0,
       errors.length === 0 ? 'and the page raised nothing'
                           : `the page raised: ${errors.join(' | ')}`);
 
-process.stdout.write(`\n${failures === 0
+process.stdout.write(`\n${tally.failures === 0
     ? 'mullion adopts a document, puts it back, and stops the work ' +
       'behind a tab\n'
-    : `${failures} failed\n`}`);
-process.exitCode = failures;
+    : `${tally.failures} failed\n`}`);
+process.exitCode = tally.failures;
 

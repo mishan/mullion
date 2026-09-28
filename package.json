@@ -26,12 +26,12 @@
     "test": "node test/check.mjs",
     "test:demo": "node test/demo.mjs",
     "types": "tsc",
-    "demo": "node test/serve.mjs",
+    "demo": "shotbox-serve . 8080 demo/",
     "shot": "node tools/shot.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0",
-    "shotbox": "github:mishan/shotbox",
+    "shotbox": "github:mishan/shotbox#serve-command",
     "typescript": "5.9.3"
   }
 }
