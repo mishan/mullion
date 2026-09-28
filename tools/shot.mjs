@@ -11,8 +11,10 @@
  *   npm install && npx playwright install chromium
  *   node tools/shot.mjs            # needs ffmpeg on the PATH for the gif
  *
- * The server, the page errors and the gif are shotbox's: the pieces
- * several projects had copied.
+ * The server, the page errors, the pointer and captions, the cut and the
+ * gif are shotbox's: the pieces several projects had copied. The browser
+ * runs in shotbox's seal, so a font or an alias in your home does not
+ * make these pictures differ from anybody else's.
  *
  * A tiling layout is a thing somebody does, not a thing that looks a
  * certain way, so the README wants a recording of somebody doing it and
@@ -27,7 +29,7 @@
  * behind another tab stops drawing, and the Activity chart beside it
  * says so.
  *
- * The pointer is drawn by this file and not by the browser: a recording
+ * The pointer is drawn into the page and not by the browser: a recording
  * of a drag with no cursor in it is a layout rearranging itself for no
  * reason. So is a chord nobody can see pressed, so those are captioned.
  * Both are the only things here the page does not already do.
@@ -39,7 +41,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright';
-import { gif, pageErrors, serve } from 'shotbox';
+import { dress, film, gif, pageErrors, sealed, serve } from 'shotbox';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(here, '..', 'demo');
@@ -49,63 +51,11 @@ const WIDE = 840;               /* what the gif is scaled to */
 const FPS = 8;
 const OG = { width: 1200, height: 630 };
 
-/* A pointer, since the browser does not record its own, and a caption
-   for a key pressed. */
-const DRESS = () =>
-{
-    const dot = document.createElement('div');
-    const cap = document.createElement('div');
-
-    dot.dataset.shot = '';
-    dot.style.cssText = [
-        'position: fixed', 'z-index: 2147483647', 'pointer-events: none',
-        'width: 14px', 'height: 14px', 'margin: -7px 0 0 -7px',
-        'border-radius: 50%', 'background: rgba(32,32,32,0.75)',
-        'border: 2px solid #ffffff',
-        'box-shadow: 0 1px 4px rgba(0,0,0,0.4)',
-        'transition: transform 80ms ease-out',
-        'transform: scale(1)', 'left: -20px', 'top: -20px',
-    ].join(';');
-
-    cap.dataset.shot = '';
-    cap.style.cssText = [
-        'position: fixed', 'z-index: 2147483647', 'pointer-events: none',
-        'left: 50%', 'bottom: 48px', 'transform: translateX(-50%)',
-        'padding: 8px 16px', 'border-radius: 10px',
-        'font: 600 18px/1.2 system-ui, sans-serif', 'color: #ffffff',
-        'background: rgba(24,24,32,0.85)',
-        'box-shadow: 0 4px 16px rgba(0,0,0,0.3)',
-        'opacity: 0', 'transition: opacity 200ms',
-    ].join(';');
-
-    document.body.append(dot, cap);
-
-    addEventListener('mousemove', (e) =>
-    {
-        dot.style.left = `${e.clientX}px`;
-        dot.style.top = `${e.clientY}px`;
-    }, true);
-
-    addEventListener('mousedown',
-                     () => { dot.style.transform = 'scale(0.6)'; }, true);
-    addEventListener('mouseup',
-                     () => { dot.style.transform = 'scale(1)'; }, true);
-
-    let fading = 0;
-
-    window.shotCaption = (text) =>
-    {
-        cap.textContent = text;
-        cap.style.opacity = '1';
-        clearTimeout(fading);
-        fading = setTimeout(() => { cap.style.opacity = '0'; }, 1300);
-    };
-};
-
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/demo/index.html`;
 const films = await fs.mkdtemp(path.join(os.tmpdir(), 'mullion-'));
-const browser = await chromium.launch();
+const seal = await sealed();
+const browser = await chromium.launch({ env: seal.env });
 
 /* The page as a first visit finds it: no edits, no layouts, no mode. */
 const fresh = async (page) =>
@@ -139,20 +89,18 @@ const context = await browser.newContext({
 });
 
 const page = await context.newPage();
+const reel = film(page);
 const errors = pageErrors(page);
-const began = Date.now();
 
 await fresh(page);
 
-/* After the load and not before it: a node appended to <html> while the
-   parser is still on its way to <body> does not survive the trip. */
-await page.evaluate(DRESS);
+const dressing = await dress(page);
 
 /* The recording starts with the page, and the loop with the layout: what
    came before it -- a blank page, the plain one, a reload -- is cut. */
 await page.waitForTimeout(600);
 
-const cut = (Date.now() - began) / 1000;
+reel.start();
 
 await page.waitForTimeout(600);
 
@@ -195,7 +143,7 @@ const drag = async (from, target, where) =>
 
 const press = async (chord, caption) =>
 {
-    await page.evaluate((c) => window.shotCaption(c), caption);
+    await dressing.caption(caption);
     await wait(350);
     await page.keyboard.press(chord);
     await wait(900);
@@ -256,22 +204,21 @@ if (errors.length > 0)
 
 /* The still is of the layout and not of the recording, so what this file
    drew comes back out of it first. */
-await page.evaluate(() =>
-    document.querySelectorAll('[data-shot]').forEach((n) => n.remove()));
+await dressing.remove();
 await page.screenshot({ path: path.join(out, 'mullion.png') });
 
-const film = await page.video().path();
-
-await context.close();
+const video = await reel.end();
 
 await browser.close();
+await seal.close();
 site.close();
 
 /* Sixty-four colors of its own are plenty for a page of flat grays, and
    undithered: the preview animates every frame, and a dither pattern
    over it is noise the gif pays for each time. */
-await gif(film, path.join(out, 'mullion.gif'),
-          { width: WIDE, fps: FPS, from: cut, colors: 64, dither: 'none' });
+await gif(video, path.join(out, 'mullion.gif'),
+          { width: WIDE, fps: FPS, from: reel.from, colors: 64,
+            dither: 'none' });
 
 await fs.rm(films, { recursive: true, force: true });
 
