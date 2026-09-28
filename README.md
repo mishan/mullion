@@ -99,6 +99,11 @@ and the split around it collapsed — beside the same neighbor, on the same
 side, with the same share. Where that neighbor has gone too, it goes to
 the pane last focused.
 
+What a layout may hold, how a kept one is read back and what is kept is
+written down in [docs/layout.md](docs/layout.md), with cases in
+`test/layouts.json` that any other implementation of the same model can
+run.
+
 ## What a person can do
 
 | | what it does |
