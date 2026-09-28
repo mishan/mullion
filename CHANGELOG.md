@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-28
+
+A leaf's tabs can sit in its top corner, as icons, instead of across it,
+and a pane's tab can have an icon. The layout format is written down,
+with cases another implementation can run, and has fields reserved for
+mullion-gtk. Nothing changes for a page that uses neither.
 
 ### Added
 
