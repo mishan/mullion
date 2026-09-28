@@ -45,6 +45,10 @@ Nothing else is part of the tree. Fields a node does not have are
 ignored when it is read and not written back. Pixel sizes, zoom, focus
 and where a closed pane came from are not in it.
 
+One name is reserved on a leaf: `slots`, a list of names for where a
+pane goes when nothing remembers where it was (mullion-gtk writes it;
+mullion reads past it, and does not keep it).
+
 Every pane the page has that no leaf holds is **closed**: in the drawer,
 one click from coming back. The drawer is not stored; it is whatever the
 tree does not hold.
@@ -81,10 +85,15 @@ mullion compares with `===`.
 
 Names reserved for the envelope, which a reader ignores until it knows
 them: `floating` (panes in windows of their own, on a desktop), `zoom`
-(the pane filling the layout). There is an envelope only where there is
-a version, so these are only kept by a page that gives one. A reader that does not know a field
-ignores it, so an older one opens a newer layout with those panes in the
-drawer.
+(the pane filling the layout), `closed` (panes a person closed that the
+app would otherwise open where a layout does not have them). There is
+an envelope only where there is a version, so these are only kept by a
+page that gives one. A reader that does not know a field ignores it, so
+an older one opens a newer layout with those panes in the drawer.
+
+mullion-gtk also keeps `closed` for an app that gives no version, as
+`{"layout": …, "closed": […]}` with no `version` member. mullion reads
+that as no layout, as it reads any envelope when it has no version.
 
 ## Reading a kept layout back
 

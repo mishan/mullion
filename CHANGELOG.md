@@ -8,8 +8,9 @@
   what a layout may hold, how a kept one is read back, and what is kept,
   byte for byte, so another implementation of the model can read the
   layouts mullion keeps. `test/layouts.json` has 60 cases, run in the
-  suite, for that implementation to run too. `floating` and `zoom` are
-  reserved as envelope fields.
+  suite, for that implementation to run too. `floating`, `zoom` and
+  `closed` are reserved as envelope fields and `slots` as a leaf's, for
+  mullion-gtk; mullion reads past them.
 
 ### Fixed
 
