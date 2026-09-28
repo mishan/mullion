@@ -226,6 +226,10 @@ export interface Panes {
   /** The image its tab shows beside the title, or in place of it in the
    *  corner: a URL, or null for none. `data-pane-icon` in the markup. */
   setIcon(id: string, src: string | null): void;
+  /** Whether a pane's corner stays in sight while it is in front of its
+   *  leaf, rather than only while the pointer or the focus is there: for a
+   *  pane whose first row makes room for it (`--pane-corner`). */
+  setCornerPinned(id: string, on: boolean): void;
   /** Where the tabs are, once it is up: for a page that offers the
    *  titles back, or takes them away. */
   setHeader(kind: 'strip' | 'corner'): void;

@@ -91,6 +91,7 @@ panes.setTitle('editor', 'notes.txt');
 panes.setIcon('editor', 'editor.svg');
 panes.setIcon('editor', null);
 panes.setHeader('corner');
+panes.setCornerPinned('editor', true);
 panes.setLayouts({ default: { tabs: ['editor'] } },
                  { store: 'side', split: 18, version: 'b' });
 

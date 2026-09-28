@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A pinned corner.** `setCornerPinned(id, on)` keeps a pane's corner in
+  sight while it is in front of its leaf, for a pane whose first row makes
+  room for it.
+
 ## 0.4.0 — 2026-09-28
 
 A leaf's tabs can sit in its top corner, as icons, instead of across it,
