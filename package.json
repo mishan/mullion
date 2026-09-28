@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "playwright": "1.63.0",
-    "shotbox": "github:mishan/shotbox",
+    "shotbox": "^0.3.0",
     "typescript": "5.9.3"
   }
 }
