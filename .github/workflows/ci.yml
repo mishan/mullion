@@ -11,6 +11,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # And from release.yml, so a tag is published only once all three pass.
+  workflow_call:
 
 permissions:
   contents: read

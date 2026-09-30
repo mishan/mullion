@@ -1,0 +1,68 @@
+# A version, on npm, when its tag is pushed.
+#
+# The tag is the release: `git tag v0.5.0 && git push origin v0.5.0'
+# publishes what that commit holds, once the same checks a pull request
+# gets have passed in all three browsers. Nothing is built -- the
+# package is src/ as it is in the repository -- so there is nothing to
+# do between the checks and the upload but make sure the tag and
+# package.json agree about which version this is.
+#
+# There is no token. npm trusts this workflow by name (trusted
+# publishing, set up once on the package's settings page on npmjs.com),
+# and a package published that way carries provenance: a record,
+# signed, of the commit and the workflow it came from.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# A tag pushed twice is published once.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Trusted publishing wants npm 11.5.1 or later, which Node 24 has.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: The tag is the version in package.json
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but package.json says $version"
+            exit 1
+          fi
+
+      # A version like 0.5.0-rc.1 goes out under `next', so that
+      # `npm install mullion' goes on getting the last real one.
+      - name: Publish
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *-*) tag=next ;;
+            *)   tag=latest ;;
+          esac
+          # prepublishOnly would run the checks again, here in a
+          # browser this job has not installed; the check job has
+          # already run them, in three.
+          npm publish --ignore-scripts --tag "$tag"
