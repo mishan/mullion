@@ -1674,6 +1674,54 @@ export function createPanes ({ root, catalog, layouts, mode,
        strip, so a screen reader keeps its place in it across renders. */
     const lists = new WeakMap();
 
+    /* And what shows its tabs' buttons, by its box (see `hover'). */
+    const marks = new WeakMap();
+
+    /* A tab's buttons shown while the pointer or the focus is on the tab
+       or on them. Kept by pane rather than by element, on the strip,
+       which outlives the tabs: a render under a resting pointer keeps
+       them shown. No selector pairs a tab with its own pane's buttons,
+       they being in different parents. */
+    const hover = (strip) =>
+    {
+        let over = null;
+        let into = null;
+        const paneOf = (t) => t instanceof Element
+            ? t.closest('.panetab')?.id.replace(/^panetab-/, '') ??
+              t.closest('.panetabctl')?.dataset.pane ?? null
+            : null;
+        const mark = () =>
+        {
+            for (const c of strip.querySelectorAll(':scope > .panetabctl'))
+                c.classList.toggle('panehot', c.dataset.pane === over ||
+                                              c.dataset.pane === into);
+        };
+
+        strip.addEventListener('pointerover', (e) =>
+        {
+            over = paneOf(e.target);
+            mark();
+        });
+        strip.addEventListener('pointerleave', () =>
+        {
+            over = null;
+            mark();
+        });
+        strip.addEventListener('focusin', (e) =>
+        {
+            into = paneOf(e.target);
+            mark();
+        });
+        strip.addEventListener('focusout', (e) =>
+        {
+            into = strip.contains(e.relatedTarget)
+                ? paneOf(e.relatedTarget) : null;
+            mark();
+        });
+
+        return mark;
+    };
+
     const elementFor = (node) =>
     {
         let box = boxes.get(node);
@@ -1698,6 +1746,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             strip.append(list);
             box.append(strip);
             lists.set(box, list);
+            marks.set(box, hover(strip));
 
             /* Which leaf the next thing out of the drawer goes into, and
                which one the keyboard is in. Captured, because a press
@@ -1895,43 +1944,6 @@ export function createPanes ({ root, catalog, layouts, mode,
      * made to say anything, and a tab raised over another moves no boxes
      * at all.
      */
-    /* A tab's buttons shown while the pointer is on the tab or on them, or
-       the focus is in either. One rule of CSS did this while the two were
-       in one element; now the tab is in the tablist and they are not, and
-       no selector can pair a tab with the buttons of its own pane. */
-    const pair = (tab, ctl) =>
-    {
-        let over = false;
-        let into = false;
-        const show = () => ctl.classList.toggle('panehot', over || into);
-        const ours = (t) => t instanceof Node &&
-                            (t === tab || ctl.contains(t));
-
-        for (const half of [tab, ctl])
-        {
-            half.addEventListener('pointerenter', () =>
-            {
-                over = true;
-                show();
-            });
-            half.addEventListener('pointerleave', (e) =>
-            {
-                over = ours(e.relatedTarget);
-                show();
-            });
-            half.addEventListener('focusin', () =>
-            {
-                into = true;
-                show();
-            });
-            half.addEventListener('focusout', (e) =>
-            {
-                into = ours(e.relatedTarget);
-                show();
-            });
-        }
-    };
-
     const fillLeaf = (leaf) =>
     {
         const ids = liveTabs(leaf);
@@ -1981,15 +1993,16 @@ export function createPanes ({ root, catalog, layouts, mode,
                reader the buttons come after the tablist rather than after
                their tab, which is fine: they are out of the tab order, so
                the focus never meets the difference, and each is named for
-               its pane ("Close Notes"), which is what its place said. */
+               its pane ("Close Notes"), so it says whose it is wherever it
+               is read. */
             const tab = document.createElement('button');
             const shut = document.createElement('button');
-            const ctl = el('panetabctl');
             const front = i === leaf.active;
 
-            tab.style.order = String(2 * i);
-            ctl.style.order = String(2 * i + 1);
-            ctl.classList.toggle('panecurrent', front);
+            /* Below zero, so whatever else is in the row (the corner's
+               buttons, the reset) comes after the tabs without an order
+               of its own. */
+            tab.style.order = String(2 * (i - ids.length));
 
             tab.type = 'button';
             tab.className = 'panetab';
@@ -2086,8 +2099,12 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             if (!corner)
             {
+                const ctl = el('panetabctl');
+
+                ctl.style.order = String(2 * (i - ids.length) + 1);
+                ctl.classList.toggle('panecurrent', front);
+                ctl.dataset.pane = id;
                 ctl.append(...(closable(id) ? [more, shut] : [more]));
-                pair(tab, ctl);
                 ctls.push(ctl);
             }
             else if (front)
@@ -2104,6 +2121,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 c.remove();
 
         strip.append(...ctls, ...(last !== null ? [last] : []));
+        marks.get(box)();
 
         box.style.minWidth = `${minAcross(leaf, true)}px`;
         box.style.minHeight = `${least}px`;

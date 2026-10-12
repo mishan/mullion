@@ -236,9 +236,11 @@ try
         () => document.body.classList.contains('tiled'));
     await page.waitForTimeout(200);
 
-    check(tabsOnly(await tablists(page)),
+    const roles1 = await tablists(page);
+
+    check(tabsOnly(roles1),
           'tiled again, every tablist holds tabs and only tabs, to a ' +
-          `screen reader: ${JSON.stringify(await tablists(page))}`);
+          `screen reader: ${JSON.stringify(roles1)}`);
 
     /* And the focus through it: what had it in a pane still has it in
        the document, and a tab that went with the layout leaves it in
@@ -1601,7 +1603,22 @@ try
                          seat: button?.closest('.panetabs') ===
                                document.getElementById('panetab-ph-a')
                                        .closest('.panetabs'),
-                         label: button?.getAttribute('aria-label') };
+                         label: button?.getAttribute('aria-label'),
+                         /* At the row's end once it is scrolled there,
+                            after every tab and its buttons. */
+                         end: (() =>
+                         {
+                             const row = button?.closest('.panetabs');
+
+                             row.scrollLeft = row.scrollWidth;
+
+                             const at = button.getBoundingClientRect().left;
+
+                             return [...row.querySelectorAll(
+                                         '.panetab, .panetabctl')]
+                                 .every((t) => t.getBoundingClientRect()
+                                                .right <= at + 1);
+                         })() };
 
         window.phonePanes.close('ph-b');
 
@@ -1633,7 +1650,8 @@ try
           `leaves it on one moved into a leaf alone: ${listed.a} ` +
           `${listed.e}`);
 
-    check(listed.row && listed.seat && listed.label === 'Reset layout',
+    check(listed.row && listed.seat && listed.end &&
+          listed.label === 'Reset layout',
           'reset puts a button at the end of the first strip, and no ' +
           'drawer row with nothing closed');
 
@@ -3326,6 +3344,11 @@ try
                   tab('c-c').getAttribute('aria-label') === 'C-C',
             shut: [...strip.querySelectorAll('.paneshut')].map((b) => b.id)
                       .join(),
+            /* After the switcher, not among its tabs. */
+            after: [...strip.querySelectorAll('.panetab')].every(
+                (t) => t.getBoundingClientRect().right <=
+                       strip.querySelector('.paneshutwrap')
+                            .getBoundingClientRect().left + 1),
             unseen: getComputedStyle(strip).opacity === '0',
             /* Hidden from the pointer too: its corner is the pane's. */
             through: (() =>
@@ -3348,15 +3371,17 @@ try
     check(cornered.icon && cornered.words && cornered.grip,
           'and its tabs are an icon, or the title where there is none, and ' +
           `a grip for a pane alone: ${JSON.stringify(cornered)}`);
-    check(cornered.shut === 'paneshut-c-a',
+    check(cornered.shut === 'paneshut-c-a' && cornered.after,
           `with one cross, for the pane in front: ${cornered.shut}`);
     check(cornered.unseen && cornered.through,
           'out of sight, and out of the pointer\'s way, with it elsewhere');
     check(cornered.room,
           'their width from the leaf\'s edge written on it as --pane-corner');
-    check(tabsOnly(await tablists(own)),
+    const roles2 = await tablists(own);
+
+    check(tabsOnly(roles2),
           'and its switcher is a tablist of tabs only, the corner\'s ' +
-          `buttons beside it: ${JSON.stringify(await tablists(own))}`);
+          `buttons beside it: ${JSON.stringify(roles2)}`);
 
     const leafBox = await own.evaluate(() =>
     {
@@ -3878,9 +3903,11 @@ try
     check(named.status === 1, 'the layout has a status region to speak in');
     check(named.targets, 'and a tab and its cross are 24 pixels each way');
 
-    check(tabsOnly(await tablists(own)),
+    const roles3 = await tablists(own);
+
+    check(tabsOnly(roles3),
           'to a screen reader, each tablist holds its tabs and nothing ' +
-          `else: ${JSON.stringify(await tablists(own))}`);
+          `else: ${JSON.stringify(roles3)}`);
 
     /* A tab behind another shows its buttons while the pointer is on it,
        and on them, and not once it has gone. */
