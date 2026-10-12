@@ -53,6 +53,14 @@
 
 ### Fixed
 
+- A strip's tablist held its tabs' `⋯` and `×` buttons and Reset layout
+  as well as its tabs, which a tablist may not. The tablist is now an
+  element of its own in the strip, `.panetablist`, with the tabs as its
+  children and `display: contents`; the buttons are beside it in the row,
+  in `.panetabctl`, and CSS `order` keeps each tab's buttons beside it on
+  screen. `.panetabwrap` is gone: a page that styled it should style
+  `.panetab` and `.panetabctl`, and one that looked for
+  `.panetabs[role="tablist"]` should look for `.panetablist`.
 - The focus fell to the page's top when the window narrowed past
   `media` and the layout went: what had it in a pane keeps it, and a tab
   that went with the layout leaves it in its pane.

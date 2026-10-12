@@ -57,6 +57,33 @@ if (!['chromium', 'firefox', 'webkit'].includes(name))
 const tally = checks();
 const { check, skip } = tally;
 
+/* The roles of each tablist's children on `pg', as a screen reader is
+   given them: the accessibility tree, through Playwright's snapshot of it,
+   and not the DOM, where what a tablist owns is not what it contains. */
+const tablists = async (pg) =>
+{
+    const lines = (await pg.locator('body').ariaSnapshot()).split('\n');
+    const depth = (line) => /^ */.exec(line)[0].length;
+
+    return lines.flatMap((line, i) =>
+    {
+        if (!/^ *- tablist\b/.test(line))
+            return [];
+
+        const end = lines.findIndex(
+            (next, j) => j > i && depth(next) <= depth(line));
+
+        return [lines.slice(i + 1, end === -1 ? undefined : end)
+                    .filter((next) => depth(next) === depth(line) + 2)
+                    .map((next) => /- (\w+)/.exec(next)?.[1])];
+    });
+};
+
+/* Every tablist there is holds tabs, and only tabs. */
+const tabsOnly = (lists) =>
+    lists.length > 0 &&
+    lists.every((kids) => kids.length > 0 && kids.every((r) => r === 'tab'));
+
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/test/fixture/index.html`;
 const errors = [];
@@ -209,6 +236,10 @@ try
         () => document.body.classList.contains('tiled'));
     await page.waitForTimeout(200);
 
+    check(tabsOnly(await tablists(page)),
+          'tiled again, every tablist holds tabs and only tabs, to a ' +
+          `screen reader: ${JSON.stringify(await tablists(page))}`);
+
     /* And the focus through it: what had it in a pane still has it in
        the document, and a tab that went with the layout leaves it in
        that tab's pane rather than on the body. */
@@ -254,7 +285,7 @@ try
 
         const want = getComputedStyle(probe).color;
         const tab = document.querySelector(
-            '.panetabwrap:has(> .panetab[aria-selected="true"])');
+            '.panetab[aria-selected="true"]');
 
         probe.remove();
 
@@ -750,7 +781,15 @@ try
 
     check(await leafCount() === 1 &&
           await page.evaluate(() =>
-              document.getElementById('fx-paint').checkVisibility()),
+          {
+              const leaf = document.getElementById('pane-fx-paint')
+                                   .closest('.paneleaf');
+              const root = document.getElementById('root');
+
+              return document.getElementById('fx-paint').checkVisibility() &&
+                     leaf.getBoundingClientRect().width >=
+                         root.getBoundingClientRect().width - 1;
+          }),
           'Alt Enter fills the layout with one pane and draws no others');
 
     /* And everything that left the screen was told so, which is the same
@@ -1430,6 +1469,9 @@ try
     check(narrow.action === 'none',
           `a divider is a drag and not a scroll: touch-action ` +
           `${narrow.action}`);
+
+    check(tabsOnly(await tablists(page)),
+          'and a strip that scrolls has a tablist of tabs only too');
 
     /* By a finger: pressed on the divider and moved 150 pixels up.
        Only Chromium can be told to move one -- Playwright's touch
@@ -3298,8 +3340,6 @@ try
             room: parseFloat(leaf.style.getPropertyValue('--pane-corner')) ===
                   Math.ceil(leaf.getBoundingClientRect().right -
                             strip.getBoundingClientRect().left),
-            roles: [...strip.children].every(
-                (c) => c.getAttribute('role') === 'presentation'),
         };
     });
 
@@ -3314,8 +3354,9 @@ try
           'out of sight, and out of the pointer\'s way, with it elsewhere');
     check(cornered.room,
           'their width from the leaf\'s edge written on it as --pane-corner');
-    check(cornered.roles,
-          'and nothing in the tablist but its tabs\' wrappers');
+    check(tabsOnly(await tablists(own)),
+          'and its switcher is a tablist of tabs only, the corner\'s ' +
+          `buttons beside it: ${JSON.stringify(await tablists(own))}`);
 
     const leafBox = await own.evaluate(() =>
     {
@@ -3796,7 +3837,7 @@ try
     const named = await own.evaluate(() =>
     {
         const $ = (id) => document.getElementById(id);
-        const list = $('panetab-a-a').closest('.panetabs');
+        const list = $('panetab-a-a').closest('[role="tablist"]');
         const bar = document.querySelector('.panesplit');
         const big = (b) => b.width >= 24 && b.height >= 24;
 
@@ -3836,6 +3877,33 @@ try
           `a divider is a named separator worth its share: ${named.bar}`);
     check(named.status === 1, 'the layout has a status region to speak in');
     check(named.targets, 'and a tab and its cross are 24 pixels each way');
+
+    check(tabsOnly(await tablists(own)),
+          'to a screen reader, each tablist holds its tabs and nothing ' +
+          `else: ${JSON.stringify(await tablists(own))}`);
+
+    /* A tab behind another shows its buttons while the pointer is on it,
+       and on them, and not once it has gone. */
+    const shown = () => own.evaluate(() =>
+        getComputedStyle(document.getElementById('paneshut-a-b'))
+            .visibility);
+    const before = await shown();
+
+    await own.hover('#panetab-a-b');
+
+    const onTab = await shown();
+
+    await own.hover('#paneshut-a-b');
+
+    const onCross = await shown();
+
+    await own.mouse.move(1, 1);
+
+    check(before === 'hidden' && onTab === 'visible' &&
+          onCross === 'visible' && await shown() === 'hidden',
+          'a tab behind shows its cross on hover, keeps it while the ' +
+          `pointer is on it, and hides it after: ${before} ${onTab} ` +
+          `${onCross} ${await shown()}`);
 
     /* The divider from the keys: Home and End to either limit, Enter to
        even up as a double-click does, and its value told each time. */
