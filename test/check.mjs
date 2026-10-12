@@ -209,6 +209,38 @@ try
         () => document.body.classList.contains('tiled'));
     await page.waitForTimeout(200);
 
+    /* And the focus through it: what had it in a pane still has it in
+       the document, and a tab that went with the layout leaves it in
+       that tab's pane rather than on the body. */
+    const across = async (selector) =>
+    {
+        await page.focus(selector);
+        await page.setViewportSize(NARROW);
+        await page.waitForFunction(
+            () => !document.body.classList.contains('tiled'));
+
+        const at = await page.evaluate(() => ({
+            id: document.activeElement.id,
+            pane: document.activeElement.closest('[data-pane]')?.id ?? null,
+        }));
+
+        await page.setViewportSize(WIDE);
+        await page.waitForFunction(
+            () => document.body.classList.contains('tiled'));
+        await page.waitForTimeout(200);
+
+        return at;
+    };
+
+    const typed = await across('#fx-text');
+    const tabbed = await across('#panetab-fx-doc');
+
+    check(typed.id === 'fx-text',
+          `a narrow window keeps the focus where it was: ${typed.id}`);
+    check(tabbed.pane === 'fx-doc',
+          'and from a tab, puts it in that tab\'s pane: ' +
+          JSON.stringify(tabbed));
+
     /* ---- the accent ---- */
 
     /* The fixture maps no colors, so the selected tab is drawn in the
@@ -3107,8 +3139,16 @@ try
     /* A key on a tab that is not an arrow is not the strip's. */
     let own = await sandbox();
 
-    await own.evaluate(() => window.rv.make(['k-a', 'k-b'], {
-        layouts: { m: { tabs: ['k-a', 'k-b'], active: 1 } } }));
+    await own.evaluate(() =>
+    {
+        window.rv.make(['k-a', 'k-b'], {
+            layouts: { m: { tabs: ['k-a', 'k-b'], active: 1 } } });
+
+        /* Somewhere for Tab to go: a tab's cross is not in the tab
+           order, and past the end of the page Firefox leaves the focus
+           where it was for the browser's own controls. */
+        document.body.append(document.createElement('button'));
+    });
 
     for (const key of ['Enter', ' ', 'x', 'Tab'])
     {
@@ -3740,6 +3780,143 @@ try
               window.rv.panes.setLayout({ tabs: ['o-later'] }) === false),
           'setLayout refuses a layout of nothing but places kept for panes ' +
           'still to come');
+
+    await own.close();
+
+    /* ---- what a screen reader is told ----
+     *
+     * The roles and names the layout gives what it draws, the divider's
+     * value as it moves, and what is said aloud when a pane does.
+     */
+    own = await sandbox();
+    await own.evaluate(() => window.rv.make(['a-a', 'a-b', 'a-c'], {
+        layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['a-a', 'a-b'] }, { tabs: ['a-c'] }] } } }));
+
+    const named = await own.evaluate(() =>
+    {
+        const $ = (id) => document.getElementById(id);
+        const list = $('panetab-a-a').closest('.panetabs');
+        const bar = document.querySelector('.panesplit');
+        const big = (b) => b.width >= 24 && b.height >= 24;
+
+        return {
+            list: [list.getAttribute('role'),
+                   list.getAttribute('aria-label'),
+                   $('paneshut-a-a').tabIndex],
+            tab: ['role', 'aria-selected', 'aria-controls',
+                  'aria-keyshortcuts']
+                .map((a) => $('panetab-a-a').getAttribute(a)),
+            behind: $('panetab-a-b').getAttribute('aria-selected'),
+            panel: [$('pane-a-a').getAttribute('role'),
+                    $('pane-a-a').getAttribute('aria-labelledby')],
+            bar: ['role', 'aria-label', 'aria-orientation',
+                  'aria-valuenow', 'aria-controls']
+                .map((a) => bar.getAttribute(a)),
+            status: document.querySelectorAll(
+                '.panesroot > [role="status"]').length,
+            targets: big($('panetab-a-a').getBoundingClientRect()) &&
+                     big($('paneshut-a-a').getBoundingClientRect()),
+        };
+    });
+
+    check(JSON.stringify(named.list) === '["tablist","Panes",-1]' &&
+          JSON.stringify(named.tab) === JSON.stringify(
+              ['tab', 'true', 'pane-a-a',
+               'Delete Alt+W Alt+Enter Alt+Shift+ArrowLeft Alt+Shift+ArrowRight ' +
+               'Alt+Shift+ArrowUp Alt+Shift+ArrowDown']) &&
+          named.behind === 'false' &&
+          JSON.stringify(named.panel) === '["tabpanel","panetab-a-a"]',
+          'a tablist named Panes holds its tabs, each selected or not, ' +
+          'with its keys, controlling a panel it names, and its crosses ' +
+          'out of the tab order: ' +
+          JSON.stringify(named));
+    check(JSON.stringify(named.bar) === JSON.stringify(
+              ['separator', 'Resize columns', 'vertical', '50', 'pane-a-a']),
+          `a divider is a named separator worth its share: ${named.bar}`);
+    check(named.status === 1, 'the layout has a status region to speak in');
+    check(named.targets, 'and a tab and its cross are 24 pixels each way');
+
+    /* The divider from the keys: Home and End to either limit, Enter to
+       even up as a double-click does, and its value told each time. */
+    const valued = [];
+
+    await own.focus('.panesplit');
+
+    for (const key of ['Home', 'End', 'Enter', 'ArrowLeft'])
+    {
+        await own.keyboard.press(key);
+        valued.push(await own.evaluate(() => Number(
+            document.querySelector('.panesplit')
+                    .getAttribute('aria-valuenow'))));
+    }
+
+    check(valued[0] < 10 && valued[1] > 90 && valued[2] === 50 &&
+          valued[3] < 50,
+          `Home, End, Enter and an arrow on a divider: ${valued}`);
+
+    /* What is said, as a person moves a pane about. */
+    const spoken = [];
+    const heard = () => own.evaluate(() => new Promise((go) =>
+        requestAnimationFrame(() => requestAnimationFrame(() =>
+            go(document.querySelector('[role="status"]').textContent)))));
+
+    await own.focus('#panetab-a-c');
+    await own.keyboard.press('Alt+Shift+ArrowRight');
+    spoken.push(await heard());
+    await own.keyboard.press('Alt+Shift+ArrowLeft');
+    spoken.push(await heard());
+    await own.keyboard.press('Alt+Shift+ArrowRight');
+    spoken.push(await heard());
+    await own.keyboard.press('Alt+Enter');
+    spoken.push(await heard());
+    await own.keyboard.press('Alt+Enter');
+    spoken.push(await heard());
+    await own.keyboard.press('Alt+KeyW');
+    spoken.push(await heard());
+
+    const group = await own.evaluate(() =>
+    {
+        const drawer = document.querySelector('.panedrawer');
+
+        return [drawer.getAttribute('role'),
+                document.getElementById(
+                    drawer.getAttribute('aria-labelledby'))?.textContent];
+    });
+
+    await own.click('#panereopen-a-c');
+    spoken.push(await heard());
+    await own.focus('#panetab-a-c');
+    await own.keyboard.press('Delete');
+    spoken.push(await heard());
+    spoken.push(await own.evaluate(() => document.activeElement.id));
+
+    check(JSON.stringify(spoken) === JSON.stringify(
+              ['', 'A-C moved left', 'A-C split off to the right',
+               'A-C zoomed', 'A-C unzoomed', 'A-C closed', 'A-C reopened',
+               'A-C closed', 'panereopen-a-c']),
+          'what is said as a pane is moved, nothing for a pane alone at ' +
+          'the edge that has nowhere to go, and Delete on a tab closes ' +
+          `it: ${JSON.stringify(spoken)}`);
+    check(JSON.stringify(group) === '["group","Closed:"]',
+          `the drawer is a group named by its label: ${group}`);
+
+    await own.close();
+
+    /* A leaf with no strip has no tab to land on: the panel is. */
+    own = await sandbox();
+    await own.evaluate(() => window.rv.make(['l-a', 'l-b'], {
+        lone: ['l-b'],
+        layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['l-a'] }, { tabs: ['l-b'] }] } } }));
+    await own.focus('#panetab-l-a');
+    await own.keyboard.press('Alt+ArrowRight');
+
+    const landed = await own.evaluate(() => document.activeElement.id);
+
+    check(landed === 'pane-l-b',
+          `Alt and an arrow onto a leaf with no strip focuses its panel: ` +
+          landed);
 
     await own.close();
     }

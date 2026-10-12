@@ -7,6 +7,41 @@
 - **A pinned corner.** `setCornerPinned(id, on)` keeps a pane's corner in
   sight while it is in front of its leaf, for a pane whose first row makes
   room for it.
+- **Said aloud.** A pane moved, split off, zoomed, closed or reopened by a
+  person is said in a status region of the layout's own: "Notes moved
+  left".
+- **A divider from the keys, all the way.** `Home` and `End` take it to
+  either limit and `Enter` evens up the split, as a double-click does. It
+  names the pane before it with `aria-controls`.
+- A tab names the chords that act on its pane in `aria-keyshortcuts`, and
+  the drawer is a group named by its label.
+
+### Changed
+
+- The focus is drawn: a ring inside a tab or a cross, where the strip
+  cut the browser's off, and on a divider, apart from the color a
+  pointer over it gives the line.
+- A divider's line defaults to `#949494`, 3:1 on white, rather than the
+  panes' border color; `--pane-line` still sets both.
+- With forced colors, the divider and the focus are drawn in system
+  colors and the selected tab is underlined.
+- A tab and its cross are at least 24 pixels each way.
+- A tab's cross is out of the tab order, as a tablist's closing tabs
+  have it: `Delete` on the tab closes its pane, and the cross is the
+  pointer's.
+- `Alt Shift` and an arrow toward the layout's edge, for a pane alone in
+  its leaf, is refused rather than taken for a split of nothing.
+- The strip's borders and the reset button are placed by logical
+  properties, so they go to the other side in a page that reads right
+  to left.
+
+### Fixed
+
+- The focus fell to the page's top when the window narrowed past
+  `media` and the layout went: what had it in a pane keeps it, and a tab
+  that went with the layout leaves it in its pane.
+- Alt and an arrow onto a leaf with no strip left the focus where it
+  was. It goes to the leaf's panel.
 
 ## 0.4.0 — 2026-09-28
 

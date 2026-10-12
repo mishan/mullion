@@ -137,19 +137,29 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     content: "";
     position: absolute;
     inset: 0;
-    background: var(--pane-line, #dcdcdc);
+    /* Darker than the panes' borders unless the page says otherwise:
+       a divider is a control, and a control's line wants 3:1 against
+       the page where a border is only decoration. */
+    background: var(--pane-line, #949494);
     border-radius: 1px;
 }
 
 .panebox[data-dir="row"] > .panesplit::after { inset: 0 2px; }
 .panebox[data-dir="col"] > .panesplit::after { inset: 2px 0; }
 
-.panesplit:hover::after, .panesplit:focus-visible::after
+.panesplit:hover::after
 {
     background: var(--pane-held, AccentColor);
 }
 
-.panesplit:focus-visible { outline: none; }
+/* Focus is a ring on the divider and not the color a pointer over
+   it gives the line: a person at the keys has to tell which divider is
+   theirs apart from the one the mouse happens to rest on. */
+.panesplit:focus-visible
+{
+    outline: 2px solid var(--pane-held, AccentColor);
+    outline-offset: -2px;   /* inside, where no `overflow' can cut it */
+}
 
 /* ---- a pane ---- */
 
@@ -261,7 +271,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     min-width: 0;
     display: flex;
     align-items: stretch;
-    border-right: 1px solid var(--pane-line, #dcdcdc);
+    border-inline-end: 1px solid var(--pane-line, #dcdcdc);
     border-bottom: 2px solid transparent;
 }
 
@@ -274,8 +284,10 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 .panetab
 {
     flex: 0 1 auto;
-    min-width: 0;
-    padding: 0.25em 0.2em 0.25em 0.7em;
+    min-width: 24px;            /* a target, as WCAG 2.5.8 sizes one */
+    min-height: 24px;
+    padding-block: 0.25em;
+    padding-inline: 0.7em 0.2em;
     font: inherit;
     font-size: 0.85em;
     color: var(--pane-dim, #666666);
@@ -290,6 +302,16 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 .panetab[aria-selected="true"] { color: var(--pane-fg, #202020); }
 
+/* The focus ring inside what has the focus rather than round it, where
+   the strip's `overflow: hidden' would cut it off -- and round the panel
+   itself where a leaf has no strip, and the focus lands on the panel. */
+.panetabs :focus-visible,
+.pane:focus-visible
+{
+    outline: 2px solid var(--pane-held, AccentColor);
+    outline-offset: -2px;
+}
+
 .panetab.panedragging { opacity: 0.5; }
 
 /* Closing a pane puts it in the drawer, so the cross is a quiet one: on
@@ -300,7 +322,10 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 .paneshut
 {
     flex: 0 0 auto;
-    padding: 0 0.45em 0 0.2em;
+    min-width: 24px;
+    min-height: 24px;
+    padding-block: 0;
+    padding-inline: 0.2em 0.45em;
     font: inherit;
     font-size: 0.85em;
     line-height: 1;
@@ -444,7 +469,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
    drawn as a button rather than as a tab or a closed pane. */
 .panereset
 {
-    margin-left: auto;
+    margin-inline-start: auto;
     display: flex;
     align-items: center;
     padding: 0 0.3em;
@@ -631,7 +656,7 @@ body.tiled .panebody { container-type: inline-size; }
 .panescroll > .panedrawer > .panereset
 {
     position: sticky;
-    right: 0;
+    inset-inline-end: 0;
     background: var(--pane-bg, #ffffff);
 }
 
@@ -639,4 +664,51 @@ body.tiled .panebody { container-type: inline-size; }
 .paneleaf.panebare > .panetabs
 {
     display: none;
+}
+
+/* What the layout says aloud (`SAY' in panes.js): there for a screen
+   reader, and drawn nowhere. */
+.panestatus
+{
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/*
+ * Forced colors, where the system draws every color from its own few.
+ *
+ * The divider's line is a background, which forced colors takes away,
+ * so it is the text color by name; the focus ring and the line under the
+ * selected tab are the system's highlight; and the selected tab is also
+ * underlined in its text, since a highlight is one more color and a
+ * selection should not be told by color alone.
+ */
+@media (forced-colors: active)
+{
+    .panesplit::after
+    {
+        forced-color-adjust: none;
+        background: CanvasText;
+    }
+
+    .panesplit:hover::after { background: Highlight; }
+
+    .panetabs :focus-visible,
+    .pane:focus-visible,
+    .panesplit:focus-visible { outline-color: Highlight; }
+
+    .panetabwrap:has(> .panetab[aria-selected="true"]:not(.panegrip))
+    {
+        border-bottom-color: Highlight;
+    }
+
+    .panetab[aria-selected="true"]
+    {
+        text-decoration: underline 2px;
+        text-underline-offset: 0.2em;
+    }
 }
