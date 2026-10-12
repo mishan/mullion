@@ -154,7 +154,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 /* Its steps (see `dividerOf'): beside its middle, over the panes on
    either side of it and not over the divider, which is still all there
-   to drag; shown while the pointer is on it. */
+   to drag; shown while the pointer is on it, or after a finger has
+   tapped it (`.panesteps'). */
 .panestep
 {
     position: absolute;
@@ -173,13 +174,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     visibility: hidden;
 }
 
-.panesplit:hover > .panestep { visibility: visible; }
-
-/* And always, where nothing hovers: a finger has no way to show them. */
-@media (hover: none)
-{
-    .panestep { visibility: visible; }
-}
+.panesplit:hover > .panestep,
+.panesplit.panesteps > .panestep { visibility: visible; }
 
 .panebox[data-dir="row"] > .panesplit > .panestep { top: calc(50% - 12px); }
 .panebox[data-dir="row"] > .panesplit > .panestep:first-of-type { right: 100%; }

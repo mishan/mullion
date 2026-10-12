@@ -2363,6 +2363,19 @@ export function createPanes ({ root, catalog, layouts, mode,
             bar.append(step);
         }
 
+        /* A finger has no hover to show the steps by, and steps always
+           shown would lie over the panes' own controls either side. So
+           a tap on the divider that drags nothing shows them, until a
+           press anywhere else. */
+        const unstep = (d) =>
+        {
+            if (bar.contains(d.target))
+                return;
+
+            bar.classList.remove('panesteps');
+            window.removeEventListener('pointerdown', unstep, true);
+        };
+
         bar.addEventListener('pointerdown', (e) =>
         {
             /* A step is a click, not the start of a drag. */
@@ -2391,6 +2404,11 @@ export function createPanes ({ root, catalog, layouts, mode,
 
                 if (moved)
                     changed();
+                else if (e.pointerType !== 'mouse')
+                {
+                    bar.classList.add('panesteps');
+                    window.addEventListener('pointerdown', unstep, true);
+                }
             };
 
             bar.setPointerCapture(e.pointerId);
