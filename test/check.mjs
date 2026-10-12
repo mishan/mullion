@@ -57,6 +57,33 @@ if (!['chromium', 'firefox', 'webkit'].includes(name))
 const tally = checks();
 const { check, skip } = tally;
 
+/* The roles of each tablist's children on `pg', as a screen reader is
+   given them: the accessibility tree, through Playwright's snapshot of it,
+   and not the DOM, where what a tablist owns is not what it contains. */
+const tablists = async (pg) =>
+{
+    const lines = (await pg.locator('body').ariaSnapshot()).split('\n');
+    const depth = (line) => /^ */.exec(line)[0].length;
+
+    return lines.flatMap((line, i) =>
+    {
+        if (!/^ *- tablist\b/.test(line))
+            return [];
+
+        const end = lines.findIndex(
+            (next, j) => j > i && depth(next) <= depth(line));
+
+        return [lines.slice(i + 1, end === -1 ? undefined : end)
+                    .filter((next) => depth(next) === depth(line) + 2)
+                    .map((next) => /- (\w+)/.exec(next)?.[1])];
+    });
+};
+
+/* Every tablist there is holds tabs, and only tabs. */
+const tabsOnly = (lists) =>
+    lists.length > 0 &&
+    lists.every((kids) => kids.length > 0 && kids.every((r) => r === 'tab'));
+
 const site = await serve(path.join(here, '..'));
 const base = `http://127.0.0.1:${site.address().port}/test/fixture/index.html`;
 const errors = [];
@@ -209,6 +236,12 @@ try
         () => document.body.classList.contains('tiled'));
     await page.waitForTimeout(200);
 
+    const roles1 = await tablists(page);
+
+    check(tabsOnly(roles1),
+          'tiled again, every tablist holds tabs and only tabs, to a ' +
+          `screen reader: ${JSON.stringify(roles1)}`);
+
     /* And the focus through it: what had it in a pane still has it in
        the document, and a tab that went with the layout leaves it in
        that tab's pane rather than on the body. */
@@ -254,7 +287,7 @@ try
 
         const want = getComputedStyle(probe).color;
         const tab = document.querySelector(
-            '.panetabwrap:has(> .panetab[aria-selected="true"])');
+            '.panetab[aria-selected="true"]');
 
         probe.remove();
 
@@ -750,7 +783,15 @@ try
 
     check(await leafCount() === 1 &&
           await page.evaluate(() =>
-              document.getElementById('fx-paint').checkVisibility()),
+          {
+              const leaf = document.getElementById('pane-fx-paint')
+                                   .closest('.paneleaf');
+              const root = document.getElementById('root');
+
+              return document.getElementById('fx-paint').checkVisibility() &&
+                     leaf.getBoundingClientRect().width >=
+                         root.getBoundingClientRect().width - 1;
+          }),
           'Alt Enter fills the layout with one pane and draws no others');
 
     /* And everything that left the screen was told so, which is the same
@@ -1431,6 +1472,9 @@ try
           `a divider is a drag and not a scroll: touch-action ` +
           `${narrow.action}`);
 
+    check(tabsOnly(await tablists(page)),
+          'and a strip that scrolls has a tablist of tabs only too');
+
     /* By a finger: pressed on the divider and moved 150 pixels up.
        Only Chromium can be told to move one -- Playwright's touch
        screen taps and does nothing else -- so elsewhere it is said and
@@ -1559,7 +1603,22 @@ try
                          seat: button?.closest('.panetabs') ===
                                document.getElementById('panetab-ph-a')
                                        .closest('.panetabs'),
-                         label: button?.getAttribute('aria-label') };
+                         label: button?.getAttribute('aria-label'),
+                         /* At the row's end once it is scrolled there,
+                            after every tab and its buttons. */
+                         end: (() =>
+                         {
+                             const row = button?.closest('.panetabs');
+
+                             row.scrollLeft = row.scrollWidth;
+
+                             const at = button.getBoundingClientRect().left;
+
+                             return [...row.querySelectorAll(
+                                         '.panetab, .panetabctl')]
+                                 .every((t) => t.getBoundingClientRect()
+                                                .right <= at + 1);
+                         })() };
 
         window.phonePanes.close('ph-b');
 
@@ -1591,7 +1650,8 @@ try
           `leaves it on one moved into a leaf alone: ${listed.a} ` +
           `${listed.e}`);
 
-    check(listed.row && listed.seat && listed.label === 'Reset layout',
+    check(listed.row && listed.seat && listed.end &&
+          listed.label === 'Reset layout',
           'reset puts a button at the end of the first strip, and no ' +
           'drawer row with nothing closed');
 
@@ -3284,6 +3344,11 @@ try
                   tab('c-c').getAttribute('aria-label') === 'C-C',
             shut: [...strip.querySelectorAll('.paneshut')].map((b) => b.id)
                       .join(),
+            /* After the switcher, not among its tabs. */
+            after: [...strip.querySelectorAll('.panetab')].every(
+                (t) => t.getBoundingClientRect().right <=
+                       strip.querySelector('.paneshutwrap')
+                            .getBoundingClientRect().left + 1),
             unseen: getComputedStyle(strip).opacity === '0',
             /* Hidden from the pointer too: its corner is the pane's. */
             through: (() =>
@@ -3298,8 +3363,6 @@ try
             room: parseFloat(leaf.style.getPropertyValue('--pane-corner')) ===
                   Math.ceil(leaf.getBoundingClientRect().right -
                             strip.getBoundingClientRect().left),
-            roles: [...strip.children].every(
-                (c) => c.getAttribute('role') === 'presentation'),
         };
     });
 
@@ -3308,14 +3371,17 @@ try
     check(cornered.icon && cornered.words && cornered.grip,
           'and its tabs are an icon, or the title where there is none, and ' +
           `a grip for a pane alone: ${JSON.stringify(cornered)}`);
-    check(cornered.shut === 'paneshut-c-a',
+    check(cornered.shut === 'paneshut-c-a' && cornered.after,
           `with one cross, for the pane in front: ${cornered.shut}`);
     check(cornered.unseen && cornered.through,
           'out of sight, and out of the pointer\'s way, with it elsewhere');
     check(cornered.room,
           'their width from the leaf\'s edge written on it as --pane-corner');
-    check(cornered.roles,
-          'and nothing in the tablist but its tabs\' wrappers');
+    const roles2 = await tablists(own);
+
+    check(tabsOnly(roles2),
+          'and its switcher is a tablist of tabs only, the corner\'s ' +
+          `buttons beside it: ${JSON.stringify(roles2)}`);
 
     const leafBox = await own.evaluate(() =>
     {
@@ -3796,7 +3862,7 @@ try
     const named = await own.evaluate(() =>
     {
         const $ = (id) => document.getElementById(id);
-        const list = $('panetab-a-a').closest('.panetabs');
+        const list = $('panetab-a-a').closest('[role="tablist"]');
         const bar = document.querySelector('.panesplit');
         const big = (b) => b.width >= 24 && b.height >= 24;
 
@@ -3836,6 +3902,49 @@ try
           `a divider is a named separator worth its share: ${named.bar}`);
     check(named.status === 1, 'the layout has a status region to speak in');
     check(named.targets, 'and a tab and its cross are 24 pixels each way');
+
+    const roles3 = await tablists(own);
+
+    check(tabsOnly(roles3),
+          'to a screen reader, each tablist holds its tabs and nothing ' +
+          `else: ${JSON.stringify(roles3)}`);
+
+    /* A tab behind another shows its buttons while the pointer is on it,
+       and on them, and not once it has gone. */
+    const shown = () => own.evaluate(() =>
+        getComputedStyle(document.getElementById('paneshut-a-b'))
+            .visibility);
+    const before = await shown();
+
+    await own.hover('#panetab-a-b');
+
+    const onTab = await shown();
+
+    await own.hover('#paneshut-a-b');
+
+    const onCross = await shown();
+
+    await own.mouse.move(1, 1);
+
+    check(before === 'hidden' && onTab === 'visible' &&
+          onCross === 'visible' && await shown() === 'hidden',
+          'a tab behind shows its cross on hover, keeps it while the ' +
+          `pointer is on it, and hides it after: ${before} ${onTab} ` +
+          `${onCross} ${await shown()}`);
+
+    /* And its menu, opened from that cross's neighbor with the pointer
+       and closed from the keys once the pointer has gone: the focus goes
+       back to the button, which is still there to take it. */
+    await own.hover('#panetab-a-b');
+    await own.click('#panemenu-a-b');
+    await own.mouse.move(1, 1);
+    await own.keyboard.press('Escape');
+
+    const returned = await own.evaluate(() => document.activeElement?.id);
+
+    check(returned === 'panemenu-a-b',
+          'Escape from a tab behind\'s menu, opened by the pointer, puts ' +
+          `the focus back on its button: ${returned}`);
 
     /* The divider from the keys: Home and End to either limit, Enter to
        even up as a double-click does, and its value told each time. */

@@ -298,22 +298,33 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     overflow: hidden;
 }
 
-/* A tab and the cross that closes it are one item of the strip, so the
-   line under the tab in front runs under both of them and the border
-   between panes falls after the cross rather than before it. */
-.panetabwrap
+/* The tablist is no box: its tabs are items of the strip's row, beside
+   their buttons, which are not the tablist's (panes.js orders them). */
+.panetablist { display: contents; }
+
+/* A tab and its buttons read as one item: the line under the tab in front
+   runs under both, and the border between panes falls after the buttons
+   rather than before them. Each half draws its share. */
+.panetabctl
 {
-    flex: 0 1 auto;
-    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     align-items: stretch;
     border-inline-end: 1px solid var(--pane-line, #dcdcdc);
     border-bottom: 2px solid transparent;
+    /* Over the tab's last pixel: where the two meet at a fraction of
+       one, as at 110%, each half antialiases its edge and the line under
+       the pair shows a seam. Its background stops above its own line, or
+       that edge paints the tab's line paler instead. That pixel's clicks
+       are the buttons' then, which at 24 pixels a target costs nothing. */
+    margin-inline-start: -1px;
+    background-clip: padding-box;
 }
 
-.panetabwrap:has(> .panetab[aria-selected="true"]:not(.panegrip))
+.panetab[aria-selected="true"]:not(.panegrip),
+.panetabctl.panecurrent
 {
-    background: var(--pane-bg, #ffffff);
+    background-color: var(--pane-bg, #ffffff);
     border-bottom-color: var(--pane-held, AccentColor);
 }
 
@@ -329,6 +340,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     color: var(--pane-dim, #666666);
     background: transparent;
     border: 0;
+    border-bottom: 2px solid transparent;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -354,7 +366,9 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
    the tab in front, and on whichever tab the pointer or the focus is at.
    Hidden by `visibility' and not by `display', or a strip of them would
    change width under the pointer and the tab being aimed at would move
-   out from under it. The pane's menu, before it, is the same. */
+   out from under it. The pane's menu, before it, is the same. Shown on
+   the pane in front, and while the pointer or the focus is on the tab or
+   on them (`.panehot', panes.js). */
 .paneshut, .panemore
 {
     flex: 0 0 auto;
@@ -372,9 +386,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     visibility: hidden;
 }
 
-.panetabwrap:hover > :is(.paneshut, .panemore),
-.panetabwrap:focus-within > :is(.paneshut, .panemore),
-.panetab[aria-selected="true"] ~ :is(.paneshut, .panemore)
+.panetabctl:is(.panecurrent, .panehot,
+              :has(> [aria-expanded="true"])) > :is(.paneshut, .panemore)
 {
     visibility: visible;
 }
@@ -493,13 +506,13 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     .panecorner > .panetabs { transition: none; }
 }
 
-.panecorner .panetabwrap
+.panecorner .panetab
 {
     border: 0;
     border-radius: 3px;
 }
 
-.panecorner .panetabwrap:has(> .panetab[aria-selected="true"]:not(.panegrip))
+.panecorner .panetab[aria-selected="true"]:not(.panegrip)
 {
     background: color-mix(in srgb, var(--pane-held, AccentColor) 18%, transparent);
 }
@@ -735,7 +748,7 @@ body.tiled .panebody { container-type: inline-size; }
     scrollbar-width: none;
 }
 
-.panescroll .panetabwrap,
+.panescroll :is(.panetab, .panetabctl),
 .panescroll > .panedrawer > * { flex: 0 0 auto; }
 
 /* And the reset kept at the row's right edge while the tabs or closed
@@ -790,7 +803,8 @@ body.tiled .panebody { container-type: inline-size; }
     .pane:focus-visible,
     .panesplit:focus-visible { outline-color: Highlight; }
 
-    .panetabwrap:has(> .panetab[aria-selected="true"]:not(.panegrip))
+    .panetab[aria-selected="true"]:not(.panegrip),
+    .panetabctl.panecurrent
     {
         border-bottom-color: Highlight;
     }

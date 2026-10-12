@@ -569,8 +569,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         p.host.className = 'pane';
         p.host.id = `pane-${p.id}`;
 
-        /* `tabpanel' rather than `region': the strip above it is a
-           tablist whether it holds one tab or four, so what this is is
+        /* `tabpanel' rather than `region': the strip above it holds a
+           tablist whether it has one tab or four, so what this is is
            the panel that tab controls. Named by the tab, through
            `aria-labelledby' rather than an `aria-label' beside it -- two
            names on one element is one of them quietly winning. */
@@ -1670,6 +1670,61 @@ export function createPanes ({ root, catalog, layouts, mode,
     const boxes = new WeakMap();
     const rails = new WeakMap();
 
+    /* A leaf's tablist, by its box: made once, and never taken out of the
+       strip, so a screen reader keeps its place in it across renders. */
+    const lists = new WeakMap();
+
+    /* And what shows its tabs' buttons, by its box (see `hover'). */
+    const marks = new WeakMap();
+
+    /* A tab's buttons shown while the pointer or the focus is on the tab
+       or on them. Kept by pane rather than by element, on the strip,
+       which outlives the tabs: a render under a resting pointer keeps
+       them shown. No selector pairs a tab with its own pane's buttons,
+       they being in different parents. */
+    const hover = (strip) =>
+    {
+        let over = null;
+        let into = null;
+        const paneOf = (t) => t instanceof Element
+            ? t.closest('.panetab')?.id.replace(/^panetab-/, '') ??
+              t.closest('.panetabctl')?.dataset.pane ?? null
+            : null;
+        const mark = () =>
+        {
+            for (const c of strip.querySelectorAll(':scope > .panetabctl'))
+                c.classList.toggle('panehot', c.dataset.pane === over ||
+                                              c.dataset.pane === into);
+        };
+
+        strip.addEventListener('pointerover', (e) =>
+        {
+            over = paneOf(e.target);
+            mark();
+        });
+        /* A render that takes the hovered pane away leaves its id here
+           until the pointer moves; it matches no buttons, so it shows
+           none. */
+        strip.addEventListener('pointerleave', () =>
+        {
+            over = null;
+            mark();
+        });
+        strip.addEventListener('focusin', (e) =>
+        {
+            into = paneOf(e.target);
+            mark();
+        });
+        strip.addEventListener('focusout', (e) =>
+        {
+            into = strip.contains(e.relatedTarget)
+                ? paneOf(e.relatedTarget) : null;
+            mark();
+        });
+
+        return mark;
+    };
+
     const elementFor = (node) =>
     {
         let box = boxes.get(node);
@@ -1682,11 +1737,19 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         if (isLeaf(node))
         {
+            /* The strip is a row and not the tablist: a tablist owns tabs
+               and nothing else, and the row holds each tab's buttons too.
+               The tablist is inside it, `display: contents', so its tabs
+               are items of the row (see `fillLeaf'). */
             const strip = el('panetabs');
+            const list = el('panetablist');
 
-            strip.setAttribute('role', 'tablist');
-            strip.setAttribute('aria-label', 'Panes');
+            list.setAttribute('role', 'tablist');
+            list.setAttribute('aria-label', 'Panes');
+            strip.append(list);
             box.append(strip);
+            lists.set(box, list);
+            marks.set(box, hover(strip));
 
             /* Which leaf the next thing out of the drawer goes into, and
                which one the keyboard is in. Captured, because a press
@@ -1877,18 +1940,21 @@ export function createPanes ({ root, catalog, layouts, mode,
      * is why a <details> adopted here can hand its disclosure over to it
      * without the page having two kinds of header to style.
      *
-     * The strip is written out again every time because it is buttons and
-     * nothing else. The hosts are not: one is touched only where it has
-     * come from somewhere else. What order they sit in says nothing --
-     * one of them is shown and the rest are not -- so it is not made to
-     * say anything, and a tab raised over another moves no boxes at all.
+     * The strip's tabs and buttons are written out again every time; its
+     * tablist is not, and nor are the hosts: a host is touched only where
+     * it has come from somewhere else. What order the hosts sit in says
+     * nothing -- one of them is shown and the rest are not -- so it is not
+     * made to say anything, and a tab raised over another moves no boxes
+     * at all.
      */
     const fillLeaf = (leaf) =>
     {
         const ids = liveTabs(leaf);
         const box = elementFor(leaf);
         const strip = box.firstElementChild;
-        const wraps = [];
+        const list = lists.get(box);
+        const tabs = [];
+        const ctls = [];
         let last = null;
         const lone = ids.length === 1 && bare(ids[0]);
 
@@ -1925,17 +1991,21 @@ export function createPanes ({ root, catalog, layouts, mode,
             const p = panes.get(id);
             const host = adopt(p);
 
-            /* The tab and the cross that closes it, in a wrapper of
-               their own. A tablist's children are tabs, and a cross is
-               not one -- `presentation' is what lets a tablist hold the
-               pair and go on owning the tab inside it. It is also what
-               keeps a tab's text the pane's title and nothing else. */
-            const wrap = el('panetabwrap');
+            /* The tab in the tablist and its buttons beside it in the row,
+               put next to each other on screen by `order'. To a screen
+               reader the buttons come after the tablist rather than after
+               their tab, which is fine: they are out of the tab order, so
+               the focus never meets the difference, and each is named for
+               its pane ("Close Notes"), so it says whose it is wherever it
+               is read. */
             const tab = document.createElement('button');
             const shut = document.createElement('button');
             const front = i === leaf.active;
 
-            wrap.setAttribute('role', 'presentation');
+            /* Below zero, so whatever else is in the row (the corner's
+               buttons, the reset) comes after the tabs without an order
+               of its own. */
+            tab.style.order = String(2 * (i - ids.length));
 
             tab.type = 'button';
             tab.className = 'panetab';
@@ -2026,23 +2096,35 @@ export function createPanes ({ root, catalog, layouts, mode,
             /* No cross for a pane nothing here can close: an ephemeral
                one on a page that has not said how it ends. In the corner,
                one menu and one cross for the pane in front, after the
-               switcher rather than inside it, where they are that one's
-               and no other's. */
-            wrap.append(tab, ...(corner ? []
-                                 : closable(id) ? [more, shut] : [more]));
-            wraps.push(wrap);
+               switcher rather than beside a tab, where they are that
+               one's and no other's. */
+            tabs.push(tab);
 
-            if (corner && front)
+            if (!corner)
             {
-                /* In a wrapper of its own, as a strip's cross is in the
-                   tab's: a tablist's children are tabs. */
+                const ctl = el('panetabctl');
+
+                ctl.style.order = String(2 * (i - ids.length) + 1);
+                ctl.classList.toggle('panecurrent', front);
+                ctl.dataset.pane = id;
+                ctl.append(...(closable(id) ? [more, shut] : [more]));
+                ctls.push(ctl);
+            }
+            else if (front)
+            {
                 last = el('paneshutwrap');
-                last.setAttribute('role', 'presentation');
                 last.append(more, ...(closable(id) ? [shut] : []));
             }
         });
 
-        strip.replaceChildren(...wraps, ...(last !== null ? [last] : []));
+        list.replaceChildren(...tabs);
+
+        for (const c of [...strip.children])
+            if (c !== list)
+                c.remove();
+
+        strip.append(...ctls, ...(last !== null ? [last] : []));
+        marks.get(box)();
 
         box.style.minWidth = `${minAcross(leaf, true)}px`;
         box.style.minHeight = `${least}px`;
@@ -2475,7 +2557,6 @@ export function createPanes ({ root, catalog, layouts, mode,
         const wrap = el('panereset');
         const button = document.createElement('button');
 
-        wrap.setAttribute('role', 'presentation');
         button.type = 'button';
         button.textContent = again;
         button.title = 'Put back the layout this page starts with';
@@ -3216,13 +3297,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         menu.el.remove();
         menu = null;
         window.removeEventListener('pointerdown', away, true);
-        trigger?.setAttribute('aria-expanded', 'false');
-        trigger?.removeAttribute('aria-controls');
 
         /* Back to what opened it: the tab, from the keys, or the
-           button. */
+           button -- before the button stops being expanded, which is
+           what shows a background tab's buttons while its menu has the
+           focus; a hidden button takes no focus. */
         if (back)
             (from?.isConnected ? from : trigger)?.focus();
+
+        trigger?.setAttribute('aria-expanded', 'false');
+        trigger?.removeAttribute('aria-controls');
     };
 
     const away = (e) =>
