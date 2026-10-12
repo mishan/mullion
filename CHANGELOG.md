@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-12
+
+Keyboard and screen-reader work. Every move a drag makes has a menu and
+a chord, a divider moves from the keys, and what the layout does is said
+aloud. A strip's tablist holds only its tabs: a page that styled
+`.panetabwrap` or found the tablist as `.panetabs[role="tablist"]`
+should read Changed below.
 
 ### Added
 
