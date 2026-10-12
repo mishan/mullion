@@ -349,6 +349,10 @@ export function createPanes ({ root, catalog, layouts, mode,
 
     let tiled = false;
     let dead = false;           /* once destroy() has handed it all back */
+
+    /* What puts away the steps a finger has shown on a divider, while it
+       has (see `dividerOf'): one divider's at a time. */
+    let stepping = null;
     let above = null;           /* the overlay, once anything wants one */
     let hint = null;            /* where a dragged tab would land */
 
@@ -2339,7 +2343,8 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         /* A step either way from a click, for a pointer that cannot
            hold a drag (WCAG 2.5.7): two buttons beside the middle of the
-           divider, seen while the pointer is on it. Pointer's only, and
+           divider, seen while a mouse is on it or after a finger has
+           tapped it (see `unstep'). Pointer's only, and
            out of the accessibility tree -- from the keys, the divider
            takes the arrows itself. Left and up first, on the screen. */
         for (const sign of [-1, 1])
@@ -2366,14 +2371,15 @@ export function createPanes ({ root, catalog, layouts, mode,
         /* A finger has no hover to show the steps by, and steps always
            shown would lie over the panes' own controls either side. So
            a tap on the divider that drags nothing shows them, until a
-           press anywhere else. */
+           press anywhere else, a render or the end. */
         const unstep = (d) =>
         {
-            if (bar.contains(d.target))
+            if (d instanceof Event && bar.contains(d.target))
                 return;
 
             bar.classList.remove('panesteps');
             window.removeEventListener('pointerdown', unstep, true);
+            stepping = null;
         };
 
         bar.addEventListener('pointerdown', (e) =>
@@ -2382,39 +2388,72 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (e.target !== bar)
                 return;
 
-            let from = row ? e.clientX : e.clientY;
+            const start = row ? e.clientX : e.clientY;
+            let from = start;
             let moved = false;
+
+            /* This pointer's, and no other's, as a tab's drag is; and a
+               drag only past 5 pixels, as a tab's is, so that a finger's
+               tap, which wanders, is a tap. */
+            const mine = (m) => m.pointerId === e.pointerId;
 
             const move = (m) =>
             {
                 const to = row ? m.clientX : m.clientY;
 
-                moved ||= to !== from;
+                if (!mine(m) || (!moved && Math.abs(to - start) < 5))
+                    return;
+
+                moved = true;
                 by((to - from) * (row && backward(bar) ? -1 : 1));
                 from = to;
             };
 
-            /* Kept and told only if it went anywhere: a press on a
-               divider is not a new layout. */
-            const up = () =>
+            const done = () =>
             {
                 bar.removeEventListener('pointermove', move);
                 bar.removeEventListener('pointerup', up);
-                bar.removeEventListener('pointercancel', up);
+                bar.removeEventListener('pointercancel', cancel);
+            };
+
+            /* Kept and told only if it went anywhere: a press on a
+               divider is not a new layout. A finger's that went nowhere
+               shows the steps. */
+            const up = (u) =>
+            {
+                if (!mine(u))
+                    return;
+
+                done();
 
                 if (moved)
                     changed();
                 else if (e.pointerType !== 'mouse')
                 {
+                    stepping?.();
                     bar.classList.add('panesteps');
                     window.addEventListener('pointerdown', unstep, true);
+                    stepping = unstep;
                 }
+            };
+
+            /* Taken by the browser or the system: what moved is kept,
+               and nothing was tapped. */
+            const cancel = (c) =>
+            {
+                if (!mine(c))
+                    return;
+
+                done();
+
+                if (moved)
+                    changed();
             };
 
             bar.setPointerCapture(e.pointerId);
             bar.addEventListener('pointermove', move);
             bar.addEventListener('pointerup', up);
-            bar.addEventListener('pointercancel', up);
+            bar.addEventListener('pointercancel', cancel);
             e.preventDefault();
         });
 
@@ -2814,6 +2853,8 @@ export function createPanes ({ root, catalog, layouts, mode,
         const was = document.activeElement;
         const from = was instanceof Element
             ? was.closest('.pane')?.id.replace(/^pane-/, '') ?? null : null;
+        stepping?.();
+
         /* An open menu is shut by any render, and the focus in it goes
            back to its button. */
         const opener = menu !== null && menu.el.contains(was)
@@ -3992,6 +4033,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 return;
 
             dead = true;
+            stepping?.();
             window.removeEventListener('keydown', command);
             measure?.disconnect();
             document.removeEventListener('visibilitychange', settle);

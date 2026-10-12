@@ -174,8 +174,14 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     visibility: hidden;
 }
 
-.panesplit:hover > .panestep,
 .panesplit.panesteps > .panestep { visibility: visible; }
+
+/* Hover only where it is the pointer's: a touch browser keeps :hover on
+   what was last touched, which after a drag would leave them up. */
+@media (hover: hover)
+{
+    .panesplit:hover > .panestep { visibility: visible; }
+}
 
 .panebox[data-dir="row"] > .panesplit > .panestep { top: calc(50% - 12px); }
 .panebox[data-dir="row"] > .panesplit > .panestep:first-of-type { right: 100%; }

@@ -1512,6 +1512,35 @@ try
           'can step it, and puts them away with a tap elsewhere: ' +
           `${unseen} ${seen} ${from}->${to} ${kept} ${await steps()}`);
 
+    /* And a real finger's tap wanders: four pixels is still a tap, not a
+       drag. Only Chromium can be told to move a finger. */
+    if (name !== 'chromium')
+        skip(`a tap that wanders is still a tap: no touch move in ${name}`);
+    else
+    {
+        const cdp = await touch.newCDPSession(phone);
+        const x = splitAt.x + splitAt.width / 2;
+        const y = splitAt.y + splitAt.height / 2;
+        const was = await valueNow();
+
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchStart', touchPoints: [{ x, y }] });
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchMove', touchPoints: [{ x, y: y + 4 }] });
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchEnd', touchPoints: [] });
+        await phone.waitForTimeout(100);
+
+        const wandered = await steps();
+        const still = await valueNow();
+
+        await phone.touchscreen.tap(x, Math.max(1, splitAt.y - 80));
+
+        check(wandered === 'visible,visible' && still === was,
+              'a tap that wanders four pixels shows the steps and moves ' +
+              `nothing: ${wandered} ${was}->${still}`);
+    }
+
     /* By a finger: pressed on the divider and moved 150 pixels up.
        Only Chromium can be told to move one -- Playwright's touch
        screen taps and does nothing else -- so elsewhere it is said and

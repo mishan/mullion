@@ -113,7 +113,7 @@ run.
 | the cross on a tab, or `Delete` on it | close it: to the drawer, or for an ephemeral pane, ask the page |
 | the `⋯` on a tab, a right click on it, or `Menu` / `Shift F10` on it | a menu of everything a drag does: move the pane left, right, up or down, split it off right or below, move it along its strip, close it |
 | `←` `→` `Home` `End` on a tab | the tab that way along its strip, or the first or last |
-| a divider | drag, or click the step beside its middle either way, or focus it and use the arrows, `Home` and `End` for either limit; double-click or `Enter` to even up |
+| a divider | drag, or click the step beside its middle either way (on a touch screen, tap the divider first to show its steps), or focus it and use the arrows, `Home` and `End` for either limit; double-click or `Enter` to even up |
 | `Alt` + arrow | move the focus to the pane that way |
 | `Alt Shift` + arrow | move the *pane* that way; from a tab of several, along its strip first |
 | `Alt \` / `Alt -` | split the pane in front off right / down; in a leaf of one, open the first closed pane there |

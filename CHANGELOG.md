@@ -7,8 +7,8 @@
 - On a touch screen a divider's step buttons were always shown, over the
   panes either side of it and whatever controls those had there. They
   show once the divider is tapped, and go with a tap anywhere else.
-- The check that a scrolling strip's tablist holds only tabs looked at
-  the wrong page.
+- A divider took a second finger's moves and lifts as the first's, and
+  a tap that wandered by a pixel as a drag of it.
 
 ## 0.5.0 — 2026-10-12
 
