@@ -3932,6 +3932,20 @@ try
           `pointer is on it, and hides it after: ${before} ${onTab} ` +
           `${onCross} ${await shown()}`);
 
+    /* And its menu, opened from that cross's neighbor with the pointer
+       and closed from the keys once the pointer has gone: the focus goes
+       back to the button, which is still there to take it. */
+    await own.hover('#panetab-a-b');
+    await own.click('#panemenu-a-b');
+    await own.mouse.move(1, 1);
+    await own.keyboard.press('Escape');
+
+    const returned = await own.evaluate(() => document.activeElement?.id);
+
+    check(returned === 'panemenu-a-b',
+          'Escape from a tab behind\'s menu, opened by the pointer, puts ' +
+          `the focus back on its button: ${returned}`);
+
     /* The divider from the keys: Home and End to either limit, Enter to
        even up as a double-click does, and its value told each time. */
     const valued = [];

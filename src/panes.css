@@ -315,7 +315,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     /* Over the tab's last pixel: where the two meet at a fraction of
        one, as at 110%, each half antialiases its edge and the line under
        the pair shows a seam. Its background stops above its own line, or
-       that edge paints the tab's line paler instead. */
+       that edge paints the tab's line paler instead. That pixel's clicks
+       are the buttons' then, which at 24 pixels a target costs nothing. */
     margin-inline-start: -1px;
     background-clip: padding-box;
 }
@@ -385,7 +386,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     visibility: hidden;
 }
 
-.panetabctl:is(.panecurrent, .panehot) > :is(.paneshut, .panemore)
+.panetabctl:is(.panecurrent, .panehot,
+              :has(> [aria-expanded="true"])) > :is(.paneshut, .panemore)
 {
     visibility: visible;
 }

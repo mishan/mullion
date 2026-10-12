@@ -1702,6 +1702,9 @@ export function createPanes ({ root, catalog, layouts, mode,
             over = paneOf(e.target);
             mark();
         });
+        /* A render that takes the hovered pane away leaves its id here
+           until the pointer moves; it matches no buttons, so it shows
+           none. */
         strip.addEventListener('pointerleave', () =>
         {
             over = null;
@@ -3294,13 +3297,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         menu.el.remove();
         menu = null;
         window.removeEventListener('pointerdown', away, true);
-        trigger?.setAttribute('aria-expanded', 'false');
-        trigger?.removeAttribute('aria-controls');
 
         /* Back to what opened it: the tab, from the keys, or the
-           button. */
+           button -- before the button stops being expanded, which is
+           what shows a background tab's buttons while its menu has the
+           focus; a hidden button takes no focus. */
         if (back)
             (from?.isConnected ? from : trigger)?.focus();
+
+        trigger?.setAttribute('aria-expanded', 'false');
+        trigger?.removeAttribute('aria-controls');
     };
 
     const away = (e) =>
