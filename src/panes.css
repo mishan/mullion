@@ -152,6 +152,42 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     background: var(--pane-held, AccentColor);
 }
 
+/* Its steps (see `dividerOf'): beside its middle, over the panes on
+   either side of it and not over the divider, which is still all there
+   to drag; shown while the pointer is on it. */
+.panestep
+{
+    position: absolute;
+    z-index: 3;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font: inherit;
+    font-size: 0.85em;
+    line-height: 1;
+    color: var(--pane-fg, #202020);
+    background: var(--pane-panel, #f4f4f4);
+    border: 1px solid var(--pane-line, #949494);
+    border-radius: 3px;
+    cursor: pointer;
+    visibility: hidden;
+}
+
+.panesplit:hover > .panestep { visibility: visible; }
+
+/* And always, where nothing hovers: a finger has no way to show them. */
+@media (hover: none)
+{
+    .panestep { visibility: visible; }
+}
+
+.panebox[data-dir="row"] > .panesplit > .panestep { top: calc(50% - 12px); }
+.panebox[data-dir="row"] > .panesplit > .panestep:first-of-type { right: 100%; }
+.panebox[data-dir="row"] > .panesplit > .panestep:last-of-type { left: 100%; }
+.panebox[data-dir="col"] > .panesplit > .panestep { left: calc(50% - 12px); }
+.panebox[data-dir="col"] > .panesplit > .panestep:first-of-type { bottom: 100%; }
+.panebox[data-dir="col"] > .panesplit > .panestep:last-of-type { top: 100%; }
+
 /* Focus is a ring on the divider and not the color a pointer over
    it gives the line: a person at the keys has to tell which divider is
    theirs apart from the one the mouse happens to rest on. */
@@ -318,8 +354,8 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
    the tab in front, and on whichever tab the pointer or the focus is at.
    Hidden by `visibility' and not by `display', or a strip of them would
    change width under the pointer and the tab being aimed at would move
-   out from under it. */
-.paneshut
+   out from under it. The pane's menu, before it, is the same. */
+.paneshut, .panemore
 {
     flex: 0 0 auto;
     min-width: 24px;
@@ -336,11 +372,64 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     visibility: hidden;
 }
 
-.panetabwrap:hover > .paneshut,
-.panetabwrap:focus-within > .paneshut,
-.panetab[aria-selected="true"] + .paneshut { visibility: visible; }
+.panetabwrap:hover > :is(.paneshut, .panemore),
+.panetabwrap:focus-within > :is(.paneshut, .panemore),
+.panetab[aria-selected="true"] ~ :is(.paneshut, .panemore)
+{
+    visibility: visible;
+}
 
-.paneshut:hover { color: var(--pane-fg, #202020); }
+.paneshut:hover, .panemore:hover { color: var(--pane-fg, #202020); }
+
+.panemore { padding-inline: 0.2em; }
+
+/* The pane's menu, under its button and over everything. */
+.panemenu
+{
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    padding: 2px;
+    background: var(--pane-bg, #ffffff);
+    border: 1px solid var(--pane-line, #dcdcdc);
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+}
+
+.panemenuitem
+{
+    min-height: 24px;
+    padding: 0.2em 0.8em;
+    font: inherit;
+    font-size: 0.85em;
+    text-align: start;
+    color: var(--pane-fg, #202020);
+    background: none;
+    border: 0;
+    border-radius: 3px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.panemenuitem:hover, .panemenuitem:focus-visible
+{
+    background: color-mix(in srgb, var(--pane-held, AccentColor) 18%,
+                          transparent);
+}
+
+.panemenuitem:focus-visible
+{
+    outline: 2px solid var(--pane-held, AccentColor);
+    outline-offset: -2px;
+}
+
+.panemenuitem[aria-disabled="true"]
+{
+    color: var(--pane-dim, #666666);
+    background: none;
+    cursor: default;
+}
 
 /* A pane's icon, beside its title in a strip. */
 .paneicon
@@ -423,7 +512,7 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
 
 .panecorner > .panetabs > .paneshutwrap { display: flex; }
 
-.panecorner > .panetabs > .paneshutwrap > .paneshut
+.panecorner > .panetabs > .paneshutwrap > :is(.paneshut, .panemore)
 {
     visibility: visible;
     padding: 0.2em 0.4em;
@@ -711,4 +800,6 @@ body.tiled .panebody { container-type: inline-size; }
         text-decoration: underline 2px;
         text-underline-offset: 0.2em;
     }
+
+    .panemenuitem[aria-disabled="true"] { color: GrayText; }
 }

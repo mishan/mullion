@@ -3823,7 +3823,7 @@ try
     check(JSON.stringify(named.list) === '["tablist","Panes",-1]' &&
           JSON.stringify(named.tab) === JSON.stringify(
               ['tab', 'true', 'pane-a-a',
-               'Delete Alt+W Alt+Enter Alt+Shift+ArrowLeft Alt+Shift+ArrowRight ' +
+               'Delete Shift+F10 Alt+W Alt+Enter Alt+Shift+ArrowLeft Alt+Shift+ArrowRight ' +
                'Alt+Shift+ArrowUp Alt+Shift+ArrowDown']) &&
           named.behind === 'false' &&
           JSON.stringify(named.panel) === '["tabpanel","panetab-a-a"]',
@@ -3917,6 +3917,224 @@ try
     check(landed === 'pane-l-b',
           `Alt and an arrow onto a leaf with no strip focuses its panel: ` +
           landed);
+
+    await own.close();
+
+    /* ---- a pane's menu, and no drag needed ----
+     *
+     * Everything a drag does, from a button: a menu with the keys a menu
+     * takes, and each of its moves said aloud as a drag's would be.
+     */
+    own = await sandbox();
+    await own.evaluate(() => window.rv.make(['m-a', 'm-b', 'm-c'], {
+        layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['m-a', 'm-b'] }, { tabs: ['m-c'] }] } } }));
+
+    const opened = () => own.evaluate(() =>
+    {
+        const list = document.querySelector('[role="menu"]');
+
+        return list === null ? null : {
+            by: list.getAttribute('aria-labelledby'),
+            items: [...list.children].map((b) =>
+                (b.getAttribute('aria-disabled') ? '-' : '') +
+                b.textContent),
+            at: document.activeElement.textContent,
+            expanded: document.getElementById(
+                list.getAttribute('aria-labelledby'))
+                .getAttribute('aria-expanded'),
+        };
+    });
+    const at = () => own.evaluate(() => document.activeElement.id ||
+                                        document.activeElement.textContent);
+
+    const trigger = await own.evaluate(() =>
+        ['aria-label', 'aria-haspopup', 'aria-expanded', 'tabindex']
+            .map((a) => document.getElementById('panemenu-m-a')
+                                .getAttribute(a)));
+
+    await own.click('#panemenu-m-a');
+
+    const menu = await opened();
+    const walked = [];
+
+    for (const key of ['ArrowDown', 'End', 'ArrowDown', 'ArrowUp', 'Home'])
+    {
+        await own.keyboard.press(key);
+        walked.push(await at());
+    }
+
+    await own.keyboard.press('Escape');
+
+    const escaped = [await opened(), await at(),
+                     await own.evaluate(() => ['aria-expanded',
+                         'aria-controls'].map((a) => document.getElementById(
+                             'panemenu-m-a').getAttribute(a)).join())];
+
+    await own.focus('#panetab-m-a');
+    await own.keyboard.press('Shift+F10');
+
+    const keyed2 = (await opened())?.by;
+
+    await own.keyboard.press('Escape');
+
+    const fromKeys = await at();
+
+    await own.focus('#panetab-m-a');
+    await own.keyboard.press('ContextMenu');
+
+    const keyed3 = (await opened())?.by;
+
+    await own.mouse.click(1300, 800);
+
+    /* A right click on a tab is its menu too, and not the browser's. */
+    const right = await own.evaluate(() =>
+    {
+        const e = new MouseEvent('contextmenu', { bubbles: true,
+                                                  cancelable: true });
+
+        document.getElementById('panetab-m-a').dispatchEvent(e);
+
+        return e.defaultPrevented &&
+               document.querySelector('[role="menu"]') !== null;
+    });
+
+    await own.keyboard.press('ArrowDown');
+    await own.focus('#panetab-m-c');
+
+    const left = await opened();
+
+    /* Opened by the pointer with the focus somewhere else, Escape goes
+       to the menu's button and not back to wherever that was. */
+    await own.evaluate(() => document.getElementById('panetab-m-a')
+        .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true,
+                                                       cancelable: true })));
+    await own.keyboard.press('Escape');
+
+    const pointed = await at();
+
+    check(JSON.stringify(trigger) ===
+              '["Pane menu for M-A","menu","false","-1"]',
+          `a tab has a menu button, named for its pane: ${trigger}`);
+    check(menu !== null && menu.by === 'panemenu-m-a' &&
+          menu.expanded === 'true' && menu.at === 'Move left' &&
+          JSON.stringify(menu.items) === JSON.stringify(
+              ['Move left', 'Move right', 'Move up', 'Move down',
+               'Split right', 'Split below', '-Move tab earlier',
+               'Move tab later', 'Move to drawer']),
+          'which opens a menu of every move, the focus on the first, and ' +
+          `what cannot be done disabled: ${JSON.stringify(menu)}`);
+    check(JSON.stringify(walked) === JSON.stringify(
+              ['Move right', 'Move to drawer', 'Move left',
+               'Move to drawer', 'Move left']),
+          `and the arrows, Home and End walk it, round: ${walked}`);
+    check(escaped[0] === null && escaped[1] === 'panemenu-m-a' &&
+          escaped[2] === 'false,',
+          `Escape shuts it and puts the focus back: ${escaped}`);
+    const shut2 = await opened();
+
+    check(keyed2 === 'panemenu-m-a' && keyed3 === 'panemenu-m-a' &&
+          fromKeys === 'panetab-m-a' && shut2 === null && right &&
+          left === null && pointed === 'panemenu-m-a',
+          'Shift F10, the Menu key and a right click on a tab open it, ' +
+          'Escape goes back to the tab (or, opened by the pointer, the ' +
+          'button), and a click or the focus elsewhere shuts it: ' +
+          `${keyed2} ${keyed3} ${fromKeys} ${shut2} ${right} ${left} ` +
+          pointed);
+
+    /* Each thing it does, one after another, and what is said. */
+    const pick = async (id, words) =>
+    {
+        await own.click(`#panetab-${id}`);
+        await own.click(`#panemenu-${id}`);
+        await own.getByRole('menuitem', { name: words, exact: true })
+                 .click();
+
+        return [await own.evaluate(() => window.rv.tabs()),
+                await own.evaluate(() => new Promise((go) =>
+                    requestAnimationFrame(() => requestAnimationFrame(() =>
+                        go(document.querySelector('[role="status"]')
+                                   .textContent))))),
+                await at()];
+    };
+
+    const did = [
+        await pick('m-a', 'Move tab later'),
+        await pick('m-a', 'Move right'),
+        await pick('m-a', 'Split below'),
+        await pick('m-a', 'Move up'),
+        await pick('m-c', 'Move left'),
+        await pick('m-c', 'Split right'),
+        await pick('m-a', 'Move to drawer'),
+    ];
+
+    check(JSON.stringify(did) === JSON.stringify([
+              ['[["m-b","m-a"],["m-c"]]', 'M-A moved to tab 2 of 2', 'panetab-m-a'],
+              ['[["m-b"],["m-c","m-a"]]', 'M-A moved right', 'panetab-m-a'],
+              ['[["m-b"],[["m-c"],["m-a"]]]', 'M-A split off below',
+               'panetab-m-a'],
+              ['[["m-b"],["m-c","m-a"]]', 'M-A moved up', 'panetab-m-a'],
+              ['[["m-b","m-c"],["m-a"]]', 'M-C moved left', 'panetab-m-c'],
+              ['[[["m-b"],["m-c"]],["m-a"]]', 'M-C split off to the right',
+               'panetab-m-c'],
+              ['[["m-b"],["m-c"]]', 'M-A closed', 'panereopen-m-a'],
+          ]),
+          `and each of its moves moves, and is said: ${JSON.stringify(did)}`);
+
+    await own.close();
+
+    /* Alt Shift and an arrow on a tab of several: along the strip, and
+       out of it only past the end. */
+    own = await sandbox();
+    await own.evaluate(() => window.rv.make(['o-a', 'o-b', 'o-c'], {
+        layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+            { tabs: ['o-a', 'o-b'] }, { tabs: ['o-c'] }] } } }));
+    await own.focus('#panetab-o-a');
+
+    const along = [];
+
+    for (const key of ['Alt+Shift+ArrowRight', 'Alt+Shift+ArrowRight',
+                       'Alt+Shift+ArrowLeft'])
+    {
+        await own.keyboard.press(key);
+        along.push(await own.evaluate(() => new Promise((go) =>
+            requestAnimationFrame(() => requestAnimationFrame(() =>
+                go([window.rv.tabs(), document.activeElement.id,
+                    document.querySelector('[role="status"]')
+                            .textContent]))))));
+    }
+
+    check(JSON.stringify(along) === JSON.stringify([
+              ['[["o-b","o-a"],["o-c"]]', 'panetab-o-a',
+               'O-A moved to tab 2 of 2'],
+              ['[["o-b"],["o-c","o-a"]]', 'panetab-o-a', 'O-A moved right'],
+              ['[["o-b"],["o-a","o-c"]]', 'panetab-o-a',
+               'O-A moved to tab 1 of 2']]),
+          'Alt Shift and an arrow moves a tab along its strip, and out of ' +
+          `it past the end: ${JSON.stringify(along)}`);
+
+    /* And the divider steps from a click, for a pointer with no drag. */
+    const value = () => own.evaluate(() => Number(
+        document.querySelector('.panesplit').getAttribute('aria-valuenow')));
+    const before2 = await value();
+    const barBox = await own.locator('.panesplit').boundingBox();
+
+    await own.mouse.move(barBox.x + barBox.width / 2,
+                         barBox.y + barBox.height / 2);
+    await own.locator('.panestep').last().click();
+
+    const stepped = await value();
+
+    await own.locator('.panestep').first().click();
+
+    const back2 = await value();
+
+    check(stepped > before2 && back2 === before2 &&
+          await own.evaluate(() =>
+              [...document.querySelectorAll('.panestep')].every(
+                  (b) => b.getAttribute('aria-hidden') === 'true')),
+          `a click on a divider's step moves it, either way: ` +
+          `${before2} ${stepped} ${back2}`);
 
     await own.close();
     }
