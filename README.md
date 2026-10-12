@@ -110,9 +110,9 @@ run.
 |---|---|
 | drag a tab | onto a tab strip to put it there, onto a pane to stack, onto an edge to split, onto the drawer to close; `Esc` to take it back |
 | drag a closed pane | out of the drawer, the same way |
-| the cross on a tab | close it: to the drawer, or for an ephemeral pane, ask the page |
+| the cross on a tab, or `Delete` on it | close it: to the drawer, or for an ephemeral pane, ask the page |
 | `←` `→` `Home` `End` on a tab | the tab that way along its strip, or the first or last |
-| a divider | drag, or focus it and use the arrows; double-click to even up |
+| a divider | drag, or focus it and use the arrows, `Home` and `End` for either limit; double-click or `Enter` to even up |
 | `Alt` + arrow | move the focus to the pane that way |
 | `Alt Shift` + arrow | move the *pane* that way |
 | `Alt \` / `Alt -` | split the pane in front off right / down; in a leaf of one, open the first closed pane there |
@@ -131,6 +131,11 @@ keyboard instrument — a tiler that took `W` for itself would have taken
 it. All of them are inert while the focus is in a text box, and the
 modifier and the letters are an argument (`keys`) for a page where that
 is still wrong; the arrows are the arrows.
+
+What these do to the layout is said aloud, in a status region of the
+layout's own: "Notes moved left", "Notes closed". A tab names the chords
+that act on its pane in `aria-keyshortcuts`, and a leaf with no strip
+over it puts the focus on its panel when it is moved to.
 
 ## Markup
 
@@ -524,6 +529,14 @@ import { placePopover } from 'mullion/popover.js';
 panes.overlay().append(menu);
 placePopover(menu, x, y);   // and held inside the window
 ```
+
+Where it is put is all this does; what a keyboard and a screen reader
+need of it is the page's. Move the focus into the popover when it
+opens and back to what opened it when it closes, close it on `Escape`,
+and say on the trigger whether it is open with `aria-expanded`. Or let
+the browser do all of that: the `popover` attribute with a
+`popovertarget` button, or a `<dialog>` opened with `showModal()`,
+handles the focus and `Escape` itself.
 
 ## The demo
 

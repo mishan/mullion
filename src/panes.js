@@ -118,6 +118,13 @@ const OFF = 'data-pane-off';
 
 const off = (el) => el.hasAttribute(OFF);
 
+/* What takes the focus, near enough: for finding somewhere in a pane to
+   put it when what had it has gone. */
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), ' +
+                  'select:not([disabled]), textarea:not([disabled]), ' +
+                  'summary, [tabindex]:not([tabindex="-1"]), ' +
+                  '[contenteditable]';
+
 /*
  * What a command is, which is the part of this a page is most likely
  * to want different.
@@ -141,6 +148,27 @@ const KEYS = {
     close: ['KeyW'],
     reset: ['Digit0'],
 };
+
+/* What the layout says aloud when somebody changes it, through a live
+   region of its own: a pane moved by a chord or a drop goes somewhere
+   nobody can hear otherwise. Short: a polite region waits for whatever
+   is being read, and a long one is still being read after the next. */
+const SAY = {
+    moved: (t, way) => (way ? `${t} moved ${way}` : `${t} moved`),
+    split: (t, way) => `${t} split off ${{ left: 'to the left',
+                                           right: 'to the right',
+                                           up: 'above',
+                                           down: 'below' }[way]}`,
+    zoomed: (t) => `${t} zoomed`,
+    unzoomed: (t) => `${t} unzoomed`,
+    closed: (t) => `${t} closed`,
+    reopened: (t) => `${t} reopened`,
+    reset: () => 'Layout reset',
+};
+
+/* How many tilers this page has made, for the ids that have to differ
+   between two of them. */
+let tilers = 0;
 
 /* Where a layout is kept between visits. localStorage by default and an
    object with the same three methods when a page has somewhere better --
@@ -189,6 +217,23 @@ export function createPanes ({ root, catalog, layouts, mode,
        instead of them: overriding the one chord that clashes should not
        cost you the other five. */
     const keymap = { ...KEYS, ...keys };
+
+    /* The chords that act on a tab's pane, as its `aria-keyshortcuts'
+       says them (with Delete, which is the tab's own): by the key each
+       `code' is on a US keyboard, and only
+       with the default modifier, since a page's own `chord' could ask
+       for any. Alt Shift and an arrow moves it; the first close and
+       zoom codes that name a key close and zoom it. */
+    const named = (codes) =>
+        codes.map((c) => (/^(Key|Digit)./.test(c)
+                              ? c.replace(/^(Key|Digit)/, '')
+                              : c === 'Enter' ? c : null))
+             .find((k) => k !== null);
+
+    const chords = keymap.chord !== KEYS.chord ? null : (closes) =>
+        [closes && named(keymap.close), named(keymap.zoom)]
+            .filter(Boolean).map((k) => `Alt+${k}`)
+            .concat(Object.keys(WAY).map((a) => `Alt+Shift+${a}`));
 
     /* The class every rule in panes.css keys on, put here rather than
        asked of the page: what the layout is drawn into is whatever
@@ -1539,6 +1584,9 @@ export function createPanes ({ root, catalog, layouts, mode,
                     return;
 
                 const was = JSON.stringify(tree);
+                const out = leafWith(id) === null;
+                const t = titled(id);
+                let spoken = null;
 
                 if (where.drop === 'drawer')
                     dismiss(id);
@@ -1551,9 +1599,22 @@ export function createPanes ({ root, catalog, layouts, mode,
 
                 /* A tab let go where it was is not a new layout. */
                 if (JSON.stringify(tree) !== was)
+                {
                     changed();
+                    spoken = where.drop === 'drawer' ? SAY.closed(t)
+                           : out ? SAY.reopened(t)
+                           : where.drop === 'beside'
+                               ? SAY.split(t, where.dir === 'row'
+                                     ? (where.far ? 'right' : 'left')
+                                     : (where.far ? 'down' : 'up'))
+                           : SAY.moved(t);
+                }
 
+                /* Said once it is drawn, as everything else here is. */
                 render();
+
+                if (spoken !== null)
+                    say(spoken);
             };
 
             /* The capture is what makes elementFromPoint the question
@@ -1825,8 +1886,9 @@ export function createPanes ({ root, catalog, layouts, mode,
         const strip = box.firstElementChild;
         const wraps = [];
         let last = null;
+        const lone = ids.length === 1 && bare(ids[0]);
 
-        box.classList.toggle('panebare', ids.length === 1 && bare(ids[0]));
+        box.classList.toggle('panebare', lone);
         box.classList.toggle('panecorner', corner);
 
         if (corner && !measured.has(strip))
@@ -1879,10 +1941,15 @@ export function createPanes ({ root, catalog, layouts, mode,
             tab.setAttribute('aria-controls', host.id);
             tab.setAttribute('aria-selected', String(front));
 
-            /* Roving: one pane, one stop -- and the cross beside it, so
-               closing a pane needs no chord to be found. Tabbing through
-               a layout should pass the panes, not every tab of every one
-               of them. */
+            tab.setAttribute('aria-keyshortcuts', [
+                ...(closable(id) ? ['Delete'] : []),
+                ...(chords?.(closable(id)) ?? [])].join(' '));
+
+            /* Roving: one pane, one stop. Tabbing through a layout
+               should pass the panes, not every tab of every one of them
+               -- nor every cross: a tab closes on Delete, which is what
+               a tablist whose tabs close does, and the cross is the
+               pointer's. */
             tab.tabIndex = front ? 0 : -1;
             tab.addEventListener('click', () => raise(leaf, i));
             tab.addEventListener('keydown', (e) => along(e, leaf, ids, i));
@@ -1894,10 +1961,18 @@ export function createPanes ({ root, catalog, layouts, mode,
             shut.textContent = '×';
             shut.title = `Close ${p.title}`;
             shut.setAttribute('aria-label', `Close ${p.title}`);
-            shut.tabIndex = front ? 0 : -1;
+            shut.tabIndex = -1;
             shut.addEventListener('click', () => shutTab(id, leaf));
 
             host.setAttribute('aria-labelledby', tab.id);
+
+            /* A pane with no strip over it has no tab to be on, so the
+               panel itself is where the keyboard lands when it is
+               moved to. */
+            if (lone)
+                host.tabIndex = -1;
+            else
+                host.removeAttribute('tabindex');
 
             /* In front of somebody, which a zoom is entitled to answer
                no to: the other leaves are drawn and not shown, and a
@@ -1954,6 +2029,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         focus = leaf;
         changed();
         render();
+        say(SAY.closed(titled(id)));
 
         /* Onto its button in the drawer where the keyboard can reach one
            -- not where the drawer is a menu of the page's that is shut,
@@ -1987,6 +2063,17 @@ export function createPanes ({ root, catalog, layouts, mode,
        tablist does when what a tab shows costs nothing to show. */
     const along = (e, leaf, ids, i) =>
     {
+        /* Delete closes the pane, as the cross does. */
+        if (e.key === 'Delete' && !e.altKey && !e.ctrlKey && !e.metaKey &&
+            !e.shiftKey)
+        {
+            if (closable(ids[i]))
+                shutTab(ids[i], leaf);
+
+            e.preventDefault();
+            return;
+        }
+
         /* Plain keys only. The chords are the window's, and a tab that
            answered Alt and an arrow as well would raise its neighbor
            before the chord asked which pane is in front -- and the
@@ -2029,6 +2116,13 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         bar.setAttribute('aria-valuenow',
                          String(Math.round(fa / (fa + fb) * 100)));
+
+        /* And which pane that share is: the one in front of the first
+           leaf on the divider's first side. */
+        const front = (n) => (isLeaf(n) ? liveTabs(n)[n.active ?? 0]
+                                        : front(liveKids(n)[0]));
+
+        bar.setAttribute('aria-controls', `pane-${front(a)}`);
     };
 
     /* A divider between two of a split's live children, which is the one
@@ -2151,6 +2245,27 @@ export function createPanes ({ root, catalog, layouts, mode,
             const step = { ArrowLeft: -1, ArrowUp: -1,
                            ArrowRight: 1, ArrowDown: 1 }[e.key];
 
+            const plain = !e.altKey && !e.ctrlKey && !e.metaKey &&
+                          !e.shiftKey;
+
+            /* The first side as small as it may be, or as large; and
+               Enter as the double-click, which is a pointer's. Plain,
+               since Alt Enter is a chord. */
+            if (plain && (e.key === 'Home' || e.key === 'End'))
+            {
+                by(e.key === 'Home' ? -Infinity : Infinity);
+                changed();
+                e.preventDefault();
+                return;
+            }
+
+            if (plain && e.key === 'Enter')
+            {
+                even();
+                e.preventDefault();
+                return;
+            }
+
             if (step === undefined)
                 return;
 
@@ -2164,7 +2279,7 @@ export function createPanes ({ root, catalog, layouts, mode,
         });
 
         /* Every share of the split it is in, equal. */
-        bar.addEventListener('dblclick', () =>
+        const even = () =>
         {
             const kids = liveKids(node);
             const share = kids.reduce(
@@ -2176,7 +2291,9 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             changed();
             render();
-        });
+        };
+
+        bar.addEventListener('dblclick', even);
 
         bars[at] = bar;
         rails.set(node, bars);
@@ -2284,7 +2401,11 @@ export function createPanes ({ root, catalog, layouts, mode,
            using speech can say to press it. */
         if (!/\p{L}/u.test(again))
             button.setAttribute('aria-label', 'Reset layout');
-        button.addEventListener('click', () => reset());
+        button.addEventListener('click', () =>
+        {
+            reset();
+            say(SAY.reset());
+        });
         wrap.append(button);
         again$ = wrap;
     }
@@ -2342,6 +2463,15 @@ export function createPanes ({ root, catalog, layouts, mode,
        them. */
     const tray = el('panedrawer');
 
+    /* A group, named by its label while it has one: the buttons in it
+       are titles, and "Closed:" is what says these panes are. An id
+       of its own per tiler, for a page with two. */
+    const said = document.createElement('span');
+
+    said.className = 'panedrawerlabel';
+    said.id = `panedrawerlabel-${++tilers}`;
+    tray.setAttribute('role', 'group');
+
     const drawerOf = (out) =>
     {
         const made = [];
@@ -2354,12 +2484,12 @@ export function createPanes ({ root, catalog, layouts, mode,
                dashed buttons: what these are is the panes that are not
                on the screen, and a person who has just closed one is
                looking for exactly that sentence. */
-            const said = document.createElement('span');
-
-            said.className = 'panedrawerlabel';
             said.textContent = label;
             made.push(said);
+            tray.setAttribute('aria-labelledby', said.id);
         }
+        else
+            tray.removeAttribute('aria-labelledby');
 
         for (const id of out)
         {
@@ -2377,6 +2507,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 unzoomFor(to);
                 changed();
                 render();
+                say(SAY.reopened(titled(id)));
                 find(`panetab-${id}`)?.focus();
             });
 
@@ -2458,6 +2589,39 @@ export function createPanes ({ root, catalog, layouts, mode,
        than not displayed, which panes.css says why. */
     const keep = el('panekeep');
 
+    /* Where a person's change to the layout is said, for somebody who
+       cannot see it happen (SAY): a status region, polite, in the root
+       for as long as there is a layout and drawn nowhere. Emptied and
+       written a frame later, so the same thing said twice -- a pane
+       moved right, and right again -- is heard twice; and emptied again
+       after a while, so that reading the page later does not find an
+       old one there. */
+    const news = el('panestatus');
+    let saying = 0;
+
+    news.setAttribute('role', 'status');
+
+    const say = (text) =>
+    {
+        const now = ++saying;
+
+        news.replaceChildren();
+        requestAnimationFrame(() =>
+        {
+            if (now !== saying)
+                return;
+
+            news.replaceChildren(text);
+            setTimeout(() =>
+            {
+                if (now === saying)
+                    news.replaceChildren();
+            }, 5000);
+        });
+    };
+
+    const titled = (id) => panes.get(id).title;
+
     /* And a leaf with nothing in it, for a layout every pane has been
        closed out of. */
     let blank = null;
@@ -2487,6 +2651,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             tray.remove();
             root.classList.remove('panezoom');
             settle();
+            untiled(was, from ?? (tab?.replace(/^panetab-/, '') ?? null));
 
             return;
         }
@@ -2556,7 +2721,8 @@ export function createPanes ({ root, catalog, layouts, mode,
                 shelf.append(tray);
         }
 
-        arrange(root, shelf === null ? [tray, made, keep] : [made, keep]);
+        arrange(root, shelf === null ? [tray, made, keep, news]
+                                     : [made, keep, news]);
 
         if (some)
             fill(tree);
@@ -2638,6 +2804,39 @@ export function createPanes ({ root, catalog, layouts, mode,
             back.focus();
     };
 
+    /* Focus, after the layout has gone from under it.
+     *
+     * Putting a pane back in the document is taking it out of the layout,
+     * and the browser drops the focus of anything in it to the body on
+     * the way. So what had it has it again; and where that was the
+     * layout's own -- a tab, a cross -- the first thing in its pane that
+     * takes the focus has it instead, rather than the top of the page.
+     */
+    const untiled = (was, id) =>
+    {
+        if (!(was instanceof HTMLElement) || was === document.body ||
+            document.activeElement === was)
+            return;
+
+        /* The first that takes it: a candidate can be hidden, inert or
+           in a fold that is shut, and asking it to is the only sure
+           way to know. */
+        const pane = panes.get(id ?? /^paneshut-(.*)/.exec(was.id)?.[1]);
+        const all = [...(was.isConnected ? [was] : []),
+                     ...(pane?.el.querySelectorAll(FOCUSABLE) ?? [])];
+
+        for (const c of all)
+        {
+            if (c.checkVisibility?.() === false)
+                continue;
+
+            c.focus();
+
+            if (document.activeElement === c)
+                return;
+        }
+    };
+
     /* ---- driving it from the keys ----
      *
      * With a constraint this page has and most do not: the letters are
@@ -2713,8 +2912,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         return best;
     };
 
+    /* Onto the tab in front of a leaf -- or, where the leaf has no strip
+       to be on, the panel in front, which is focusable for this. */
     const raiseTab = (leaf) =>
-        boxOf(leaf)?.querySelector('.panetab[aria-selected="true"]')?.focus();
+    {
+        const box = boxOf(leaf);
+
+        box?.querySelector(box.classList.contains('panebare')
+                               ? ':scope > .pane:not([hidden])'
+                               : '.panetab[aria-selected="true"]')?.focus();
+    };
 
     const done = (leaf) =>
     {
@@ -2762,9 +2969,14 @@ export function createPanes ({ root, catalog, layouts, mode,
             const dir = way[0] !== 0 ? 'row' : 'col';
 
             /* Off the edge is a split, and refused where a split is:
-               the same question the drop and the split chord ask. */
-            if (to === null && !splittable(leaf, id, dir))
+               the same question the drop and the split chord ask --
+               and by a pane alone in its leaf, which has nothing to be
+               split from. */
+            if (to === null && (ids.length === 1 ||
+                                !splittable(leaf, id, dir)))
                 return;
+
+            const side = e.code.slice(5).toLowerCase();
 
             if (to !== null)
                 into(id, to);
@@ -2776,6 +2988,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             unzoomFor(leafWith(id));
             done(leafWith(id) ?? leaf);
+            say((to !== null ? SAY.moved : SAY.split)(titled(id), side));
         }
         else if (keymap.splitRow.includes(e.code) ||
                  keymap.splitCol.includes(e.code))
@@ -2796,12 +3009,16 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             beside(moving, leaf, dir, true);
             done(leaf);
+            say(SAY.split(titled(moving),
+                          dir === 'col' ? 'down'
+                        : backward(boxOf(leaf)) ? 'left' : 'right'));
         }
         else if (keymap.zoom.includes(e.code))
         {
             zoom = zoom === null ? leaf : null;
             render();
             raiseTab(zoom ?? leaf);
+            say((zoom === null ? SAY.unzoomed : SAY.zoomed)(titled(id)));
         }
         else if (keymap.close.includes(e.code))
         {
@@ -2816,9 +3033,13 @@ export function createPanes ({ root, catalog, layouts, mode,
                with its last pane has no tab to be on, and the focus
                would fall out to the top of the document. */
             done(holds(leaf) ? leaf : firstLeaf());
+            say(SAY.closed(titled(id)));
         }
         else if (keymap.reset.includes(e.code))
+        {
             reset();
+            say(SAY.reset());
+        }
         else
             return;
 
