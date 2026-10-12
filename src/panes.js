@@ -155,6 +155,7 @@ const KEYS = {
    is being read, and a long one is still being read after the next. */
 const SAY = {
     moved: (t, way) => (way ? `${t} moved ${way}` : `${t} moved`),
+    placed: (t, n, of) => `${t} moved to tab ${n} of ${of}`,
     split: (t, way) => `${t} split off ${{ left: 'to the left',
                                            right: 'to the right',
                                            up: 'above',
@@ -217,6 +218,9 @@ export function createPanes ({ root, catalog, layouts, mode,
        instead of them: overriding the one chord that clashes should not
        cost you the other five. */
     const keymap = { ...KEYS, ...keys };
+
+    /* Which tiler this is on the page, for its ids. */
+    const me = ++tilers;
 
     /* The chords that act on a tab's pane, as its `aria-keyshortcuts'
        says them (with Delete, which is the tab's own): by the key each
@@ -1942,7 +1946,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             tab.setAttribute('aria-selected', String(front));
 
             tab.setAttribute('aria-keyshortcuts', [
-                ...(closable(id) ? ['Delete'] : []),
+                ...(closable(id) ? ['Delete'] : []), 'Shift+F10',
                 ...(chords?.(closable(id)) ?? [])].join(' '));
 
             /* Roving: one pane, one stop. Tabbing through a layout
@@ -1953,7 +1957,40 @@ export function createPanes ({ root, catalog, layouts, mode,
             tab.tabIndex = front ? 0 : -1;
             tab.addEventListener('click', () => raise(leaf, i));
             tab.addEventListener('keydown', (e) => along(e, leaf, ids, i));
+
+            /* The pane's menu and not the browser's: from a right click,
+               and from the Menu key where the browser answers its keyup
+               with a context menu of its own. */
+            tab.addEventListener('contextmenu', (e) =>
+            {
+                if (menu?.id !== id)
+                    openMenu(id, leaf);
+
+                e.preventDefault();
+            });
             grab(tab, id);
+
+            /* The pane's menu (see `openMenu'), beside the cross and
+               shown when it is -- and, like it, the pointer's: from the
+               keys, the tab opens it with Menu or Shift F10. */
+            const more = document.createElement('button');
+
+            more.type = 'button';
+            more.className = 'panemore';
+            more.id = `panemenu-${id}`;
+            more.textContent = '\u22ef';
+            more.title = `Pane menu for ${p.title}`;
+            more.setAttribute('aria-label', more.title);
+            more.setAttribute('aria-haspopup', 'menu');
+            more.setAttribute('aria-expanded', 'false');
+            more.tabIndex = -1;
+            more.addEventListener('click', () =>
+            {
+                if (menu?.id === id)
+                    unmenu(true);
+                else
+                    openMenu(id, leaf);
+            });
 
             shut.type = 'button';
             shut.className = 'paneshut';
@@ -1988,18 +2025,20 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             /* No cross for a pane nothing here can close: an ephemeral
                one on a page that has not said how it ends. In the corner,
-               one cross for the pane in front, after the switcher rather
-               than inside it, where it closes that one and no other. */
-            wrap.append(tab, ...(closable(id) && !corner ? [shut] : []));
+               one menu and one cross for the pane in front, after the
+               switcher rather than inside it, where they are that one's
+               and no other's. */
+            wrap.append(tab, ...(corner ? []
+                                 : closable(id) ? [more, shut] : [more]));
             wraps.push(wrap);
 
-            if (corner && front && closable(id))
+            if (corner && front)
             {
                 /* In a wrapper of its own, as a strip's cross is in the
                    tab's: a tablist's children are tabs. */
                 last = el('paneshutwrap');
                 last.setAttribute('role', 'presentation');
-                last.append(shut);
+                last.append(more, ...(closable(id) ? [shut] : []));
             }
         });
 
@@ -2070,6 +2109,17 @@ export function createPanes ({ root, catalog, layouts, mode,
             if (closable(ids[i]))
                 shutTab(ids[i], leaf);
 
+            e.preventDefault();
+            return;
+        }
+
+        /* The context menu's keys open the pane's menu, as they would a
+           context menu: the Menu key, or Shift F10. */
+        if (e.key === 'ContextMenu' ||
+            (e.key === 'F10' && e.shiftKey && !e.altKey && !e.ctrlKey &&
+             !e.metaKey))
+        {
+            openMenu(ids[i], leaf);
             e.preventDefault();
             return;
         }
@@ -2205,8 +2255,38 @@ export function createPanes ({ root, catalog, layouts, mode,
             tell(node, at, bar);
         };
 
+        /* A step either way from a click, for a pointer that cannot
+           hold a drag (WCAG 2.5.7): two buttons beside the middle of the
+           divider, seen while the pointer is on it. Pointer's only, and
+           out of the accessibility tree -- from the keys, the divider
+           takes the arrows itself. Left and up first, on the screen. */
+        for (const sign of [-1, 1])
+        {
+            const step = document.createElement('button');
+
+            step.type = 'button';
+            step.className = 'panestep';
+            step.tabIndex = -1;
+            step.setAttribute('aria-hidden', 'true');
+            step.textContent = row ? (sign < 0 ? '\u2039' : '\u203a')
+                                   : (sign < 0 ? '\u25b4' : '\u25be');
+            /* Not focused by a press: it is out of the tree, and a
+               focus nobody can be told about is a focus lost. */
+            step.addEventListener('mousedown', (e) => e.preventDefault());
+            step.addEventListener('click', () =>
+            {
+                by(sign * 16 * (row && backward(bar) ? -1 : 1));
+                changed();
+            });
+            bar.append(step);
+        }
+
         bar.addEventListener('pointerdown', (e) =>
         {
+            /* A step is a click, not the start of a drag. */
+            if (e.target !== bar)
+                return;
+
             let from = row ? e.clientX : e.clientY;
             let moved = false;
 
@@ -2293,7 +2373,11 @@ export function createPanes ({ root, catalog, layouts, mode,
             render();
         };
 
-        bar.addEventListener('dblclick', even);
+        bar.addEventListener('dblclick', (e) =>
+        {
+            if (e.target === bar)
+                even();
+        });
 
         bars[at] = bar;
         rails.set(node, bars);
@@ -2469,7 +2553,7 @@ export function createPanes ({ root, catalog, layouts, mode,
     const said = document.createElement('span');
 
     said.className = 'panedrawerlabel';
-    said.id = `panedrawerlabel-${++tilers}`;
+    said.id = `panedrawerlabel-${me}`;
     tray.setAttribute('role', 'group');
 
     const drawerOf = (out) =>
@@ -2631,8 +2715,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         const was = document.activeElement;
         const from = was instanceof Element
             ? was.closest('.pane')?.id.replace(/^pane-/, '') ?? null : null;
-        const tab = was instanceof Element &&
-                    was.classList.contains('panetab') ? was.id : null;
+        /* An open menu is shut by any render, and the focus in it goes
+           back to its button. */
+        const opener = menu !== null && menu.el.contains(was)
+            ? `panemenu-${menu.id}` : null;
+
+        unmenu(false);
+
+        const tab = opener ?? (was instanceof Element &&
+                               was.classList.contains('panetab')
+                                   ? was.id : null);
 
         watch(!tiled && !dead);
 
@@ -2651,7 +2743,8 @@ export function createPanes ({ root, catalog, layouts, mode,
             tray.remove();
             root.classList.remove('panezoom');
             settle();
-            untiled(was, from ?? (tab?.replace(/^panetab-/, '') ?? null));
+            untiled(was,
+                    from ?? (tab?.replace(/^pane(tab|menu)-/, '') ?? null));
 
             return;
         }
@@ -2931,6 +3024,78 @@ export function createPanes ({ root, catalog, layouts, mode,
         raiseTab(leaf);
     };
 
+    /* This pane, that way: into the leaf the arrow points at, or --
+       where there is none -- off the edge of this one into a half of its
+       own. Whether it can, and nothing done, without `go'. */
+    const shift = (id, leaf, code, go = true) =>
+    {
+        const way = WAY[code];
+        const to = toward(leaf, way);
+        const dir = way[0] !== 0 ? 'row' : 'col';
+
+        /* Off the edge is a split, and refused where a split is: the
+           same question the drop and the split chord ask -- and by a
+           pane alone in its leaf, which has nothing to be split from. */
+        if (to === null && (liveTabs(leaf).length === 1 ||
+                            !splittable(leaf, id, dir)))
+            return false;
+
+        if (!go)
+            return true;
+
+        if (to !== null)
+            into(id, to);
+        else
+            beside(id, leaf, dir,
+                   way[1] > 0 ||
+                   (way[0] !== 0 &&
+                    (way[0] > 0) !== backward(boxOf(leaf))));
+
+        unzoomFor(leafWith(id));
+        done(leafWith(id) ?? leaf);
+        say((to !== null ? SAY.moved : SAY.split)(
+            titled(id), code.slice(5).toLowerCase()));
+
+        return true;
+    };
+
+    /* A pane a place along its own strip, earlier or later. Refused at
+       either end, where the strip has no place to give it. */
+    const reorder = (id, leaf, step, go = true) =>
+    {
+        const ids = liveTabs(leaf);
+        const j = ids.indexOf(id) + step;
+
+        if (j < 0 || j >= ids.length)
+            return false;
+
+        if (!go)
+            return true;
+
+        into(id, leaf, step < 0 ? ids[j] : ids[j + 1] ?? null);
+        done(leaf);
+        say(SAY.placed(titled(id), j + 1, ids.length));
+
+        return true;
+    };
+
+    /* A pane split off its leaf to the right or below, as the split
+       chords do for the pane in front. */
+    const splitOff = (id, leaf, dir, go = true) =>
+    {
+        if (liveTabs(leaf).length === 1 || !splittable(leaf, id, dir))
+            return false;
+
+        if (!go)
+            return true;
+
+        beside(id, leaf, dir, dir === 'col' || !backward(boxOf(leaf)));
+        done(leafWith(id));
+        say(SAY.split(titled(id), dir === 'col' ? 'down' : 'right'));
+
+        return true;
+    };
+
     const command = (e) =>
     {
         if (!tiled || !keymap.chord(e))
@@ -2962,33 +3127,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         }
         else if (way !== undefined)
         {
-            /* This pane, that way: into the leaf the arrow points at, or
-               -- where there is none -- off the edge of this one into a
-               half of its own. */
-            const to = toward(leaf, way);
-            const dir = way[0] !== 0 ? 'row' : 'col';
+            /* From a tab in a strip of several, along the strip first:
+               a tab moved left of the first or right of the last is
+               the one that leaves it. */
+            const moved = way[0] !== 0 &&
+                e.target instanceof Element &&
+                e.target.classList.contains('panetab') &&
+                reorder(id, leaf, way[0] * (backward(boxOf(leaf)) ? -1 : 1));
 
-            /* Off the edge is a split, and refused where a split is:
-               the same question the drop and the split chord ask --
-               and by a pane alone in its leaf, which has nothing to be
-               split from. */
-            if (to === null && (ids.length === 1 ||
-                                !splittable(leaf, id, dir)))
+            if (!moved && !shift(id, leaf, e.code))
                 return;
-
-            const side = e.code.slice(5).toLowerCase();
-
-            if (to !== null)
-                into(id, to);
-            else
-                beside(id, leaf, dir,
-                       way[1] > 0 ||
-                       (way[0] !== 0 &&
-                        (way[0] > 0) !== backward(boxOf(leaf))));
-
-            unzoomFor(leafWith(id));
-            done(leafWith(id) ?? leaf);
-            say((to !== null ? SAY.moved : SAY.split)(titled(id), side));
         }
         else if (keymap.splitRow.includes(e.code) ||
                  keymap.splitCol.includes(e.code))
@@ -3044,6 +3192,171 @@ export function createPanes ({ root, catalog, layouts, mode,
             return;
 
         e.preventDefault();
+    };
+
+    /* ---- a pane's menu ----
+     *
+     * Everything dragging a tab does, from a button, for somebody who can
+     * click and cannot hold a drag (WCAG 2.5.7): move the pane to the
+     * leaf that way, split it off, move it along its strip, close it.
+     * One menu at a time, in the root, where a strip's `overflow' does
+     * not cut it off -- and shut by any render, since what it would act
+     * on may have moved.
+     */
+    let menu = null;
+
+    const unmenu = (back) =>
+    {
+        if (menu === null)
+            return;
+
+        const trigger = find(`panemenu-${menu.id}`);
+        const { from } = menu;
+
+        menu.el.remove();
+        menu = null;
+        window.removeEventListener('pointerdown', away, true);
+        trigger?.setAttribute('aria-expanded', 'false');
+        trigger?.removeAttribute('aria-controls');
+
+        /* Back to what opened it: the tab, from the keys, or the
+           button. */
+        if (back)
+            (from?.isConnected ? from : trigger)?.focus();
+    };
+
+    const away = (e) =>
+    {
+        if (menu !== null && !menu.el.contains(e.target) &&
+            !(e.target instanceof Element &&
+              e.target.id === `panemenu-${menu.id}`))
+            unmenu(false);
+    };
+
+    const openMenu = (id, leaf) =>
+    {
+        unmenu(false);
+
+        const trigger = find(`panemenu-${id}`);
+
+        if (trigger === null)
+            return;
+
+        const ids = liveTabs(leaf);
+        const box = el('panemenu');
+        /* The tab, where the keys opened it from there; anything else
+           the focus happens to be on after a click is no part of it. */
+        const from = document.activeElement?.id === `panetab-${id}`
+            ? document.activeElement : null;
+        const items = [
+            ...['Left', 'Right', 'Up', 'Down'].map((w) =>
+                [`Move ${w.toLowerCase()}`,
+                 (go) => shift(id, leaf, `Arrow${w}`, go)]),
+            ['Split right', (go) => splitOff(id, leaf, 'row', go)],
+            ['Split below', (go) => splitOff(id, leaf, 'col', go)],
+            ...(ids.length > 1
+                ? [['Move tab earlier',
+                    (go) => reorder(id, leaf, -1, go)],
+                   ['Move tab later',
+                    (go) => reorder(id, leaf, 1, go)]]
+                : []),
+            ...(closable(id)
+                ? [[panes.get(id).ephemeral ? 'Close' : 'Move to drawer',
+                    (go) =>
+                    {
+                        if (go)
+                            shutTab(id, leaf);
+
+                        return true;
+                    }]]
+                : []),
+        ].map(([words, act]) =>
+        {
+            const item = document.createElement('button');
+
+            item.type = 'button';
+            item.className = 'panemenuitem';
+            item.textContent = words;
+            item.tabIndex = -1;
+            item.setAttribute('role', 'menuitem');
+
+            /* Disabled and still there, and still a stop for the arrows:
+               a move that has nowhere to go is worth knowing about. */
+            if (!act(false))
+                item.setAttribute('aria-disabled', 'true');
+            else
+                item.addEventListener('click', () =>
+                {
+                    unmenu(false);
+                    act(true);
+                });
+
+            return item;
+        });
+
+        box.id = `panemenulist-${me}`;
+        box.setAttribute('role', 'menu');
+        box.setAttribute('aria-labelledby', trigger.id);
+        box.append(...items);
+
+        /* Shut by the focus leaving it for anything but its button,
+           whose own click shuts it; and the browser's context menu not
+           over it. */
+        box.addEventListener('focusout', (e) =>
+        {
+            if (e.relatedTarget instanceof Element &&
+                !box.contains(e.relatedTarget) &&
+                e.relatedTarget !== trigger)
+                unmenu(false);
+        });
+        box.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        box.addEventListener('keydown', (e) =>
+        {
+            const i = items.indexOf(document.activeElement);
+            const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0,
+                         End: items.length - 1 }[e.key];
+
+            if (e.key === 'Escape' || e.key === 'Tab')
+            {
+                /* Tab out of a menu is out of it, from where it was
+                   opened, so the browser's own Tab goes on from there. */
+                unmenu(true);
+
+                if (e.key === 'Escape')
+                {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+            else if (to !== undefined)
+            {
+                items[(to + items.length) % items.length].focus();
+                e.preventDefault();
+            }
+        });
+
+        root.append(box);
+
+        /* Under its button, at the end the strip starts from -- and
+           inside the window: over it where there is no room under. */
+        const r = trigger.getBoundingClientRect();
+        const o = root.getBoundingClientRect();
+        const w = box.offsetWidth;
+        const h = box.offsetHeight;
+        const x = backward(trigger) ? r.right - w : r.left;
+        const y = r.bottom + h <= innerHeight ? r.bottom : r.top - h;
+
+        box.style.left =
+            `${Math.max(0, Math.min(x, innerWidth - w)) - o.left}px`;
+        box.style.top = `${Math.max(0, y) - o.top}px`;
+
+        menu = { el: box, id, from };
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.setAttribute('aria-controls', box.id);
+        window.addEventListener('pointerdown', away, true);
+        (items.find((b) => !b.hasAttribute('aria-disabled')) ?? items[0])
+            .focus();
     };
 
     window.addEventListener('keydown', command);

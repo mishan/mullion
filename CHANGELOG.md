@@ -15,6 +15,12 @@
   names the pane before it with `aria-controls`.
 - A tab names the chords that act on its pane in `aria-keyshortcuts`, and
   the drawer is a group named by its label.
+- **Nothing needs a drag.** A tab's `⋯` button, a right click on the
+  tab, or `Menu` or `Shift F10` on it, opens a menu of what a drag does:
+  move the pane to the leaf on any side, split it off right or below,
+  move it along its strip, or close it. A divider has a step either side of its middle, shown while
+  the pointer is on it (always, where nothing hovers), that moves it a
+  click at a time.
 
 ### Changed
 
@@ -31,6 +37,16 @@
   pointer's.
 - `Alt Shift` and an arrow toward the layout's edge, for a pane alone in
   its leaf, is refused rather than taken for a split of nothing.
+- `Alt Shift` and left or right, from a tab in a strip of several, moves
+  the tab along the strip, and out of the leaf only past either end.
+- A right click on a tab opens the pane's menu rather than the browser's
+  context menu.
+- The `⋯` takes room on every tab, and the tab in front shows two
+  controls beside its title rather than one. In the corner, the pane in
+  front always has the `⋯` and so the wrapper that held its cross, about
+  24 pixels more, even for a pane with no cross: a page that sizes its
+  first row by `--pane-corner` for `setCornerPinned` gets the new width
+  there, and one that sized it by hand should look again.
 - The strip's borders and the reset button are placed by logical
   properties, so they go to the other side in a page that reads right
   to left.
