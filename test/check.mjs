@@ -1519,8 +1519,9 @@ try
     else
     {
         const cdp = await touch.newCDPSession(phone);
-        const x = splitAt.x + splitAt.width / 2;
-        const y = splitAt.y + splitAt.height / 2;
+        const bar = await phone.locator('.panesplit').first().boundingBox();
+        const x = bar.x + bar.width / 2;
+        const y = bar.y + bar.height / 2;
         const was = await valueNow();
 
         await cdp.send('Input.dispatchTouchEvent',
@@ -1534,11 +1535,27 @@ try
         const wandered = await steps();
         const still = await valueNow();
 
-        await phone.touchscreen.tap(x, Math.max(1, splitAt.y - 80));
+        /* And a drag of it puts them away, not over the panes it
+           leaves them beside. */
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchStart', touchPoints: [{ x, y }] });
 
-        check(wandered === 'visible,visible' && still === was,
+        for (let i = 1; i <= 3; i++)
+            await cdp.send('Input.dispatchTouchEvent',
+                           { type: 'touchMove',
+                             touchPoints: [{ x, y: y + i * 10 }] });
+
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchEnd', touchPoints: [] });
+        await phone.waitForTimeout(100);
+
+        const dragged = await steps();
+
+        check(wandered === 'visible,visible' && still === was &&
+              dragged === 'hidden,hidden',
               'a tap that wanders four pixels shows the steps and moves ' +
-              `nothing: ${wandered} ${was}->${still}`);
+              'nothing, and a drag of the divider puts them away: ' +
+              `${wandered} ${was}->${still} ${dragged}`);
     }
 
     /* By a finger: pressed on the divider and moved 150 pixels up.
