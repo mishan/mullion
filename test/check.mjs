@@ -1472,8 +1472,91 @@ try
           `a divider is a drag and not a scroll: touch-action ` +
           `${narrow.action}`);
 
-    check(tabsOnly(await tablists(page)),
+    check(tabsOnly(await tablists(phone)),
           'and a strip that scrolls has a tablist of tabs only too');
+
+    /* A divider's steps, by a finger: none to begin with, where they
+       would lie over the panes; a tap on the divider that drags nothing
+       shows them, a tap on one steps it, and a tap anywhere else puts
+       them away. */
+    const steps = () => phone.evaluate(() =>
+        [...document.querySelector('.panesplit').children]
+            .filter((c) => c.classList.contains('panestep'))
+            .map((c) => getComputedStyle(c).visibility).join());
+    const splitAt = await phone.locator('.panesplit').first().boundingBox();
+    const valueNow = () => phone.evaluate(() => document
+        .querySelector('.panesplit').getAttribute('aria-valuenow'));
+    const unseen = await steps();
+
+    await phone.touchscreen.tap(splitAt.x + splitAt.width / 2,
+                                splitAt.y + splitAt.height / 2);
+
+    const seen = await steps();
+    const from = await valueNow();
+    const stepAt = await phone.locator('.panesplit > .panestep').last()
+                              .boundingBox();
+
+    await phone.touchscreen.tap(stepAt.x + stepAt.width / 2,
+                                stepAt.y + stepAt.height / 2);
+
+    const to = await valueNow();
+    const kept = await steps();
+
+    await phone.touchscreen.tap(splitAt.x + splitAt.width / 2,
+                                Math.max(1, splitAt.y - 80));
+
+    check(unseen === 'hidden,hidden' && seen === 'visible,visible' &&
+          to !== from && kept === 'visible,visible' &&
+          await steps() === 'hidden,hidden',
+          'a finger sees a divider\'s steps only once it has tapped it, ' +
+          'can step it, and puts them away with a tap elsewhere: ' +
+          `${unseen} ${seen} ${from}->${to} ${kept} ${await steps()}`);
+
+    /* And a real finger's tap wanders: four pixels is still a tap, not a
+       drag. Only Chromium can be told to move a finger. */
+    if (name !== 'chromium')
+        skip(`a tap that wanders is still a tap: no touch move in ${name}`);
+    else
+    {
+        const cdp = await touch.newCDPSession(phone);
+        const bar = await phone.locator('.panesplit').first().boundingBox();
+        const x = bar.x + bar.width / 2;
+        const y = bar.y + bar.height / 2;
+        const was = await valueNow();
+
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchStart', touchPoints: [{ x, y }] });
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchMove', touchPoints: [{ x, y: y + 4 }] });
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchEnd', touchPoints: [] });
+        await phone.waitForTimeout(100);
+
+        const wandered = await steps();
+        const still = await valueNow();
+
+        /* And a drag of it puts them away, not over the panes it
+           leaves them beside. */
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchStart', touchPoints: [{ x, y }] });
+
+        for (let i = 1; i <= 3; i++)
+            await cdp.send('Input.dispatchTouchEvent',
+                           { type: 'touchMove',
+                             touchPoints: [{ x, y: y + i * 10 }] });
+
+        await cdp.send('Input.dispatchTouchEvent',
+                       { type: 'touchEnd', touchPoints: [] });
+        await phone.waitForTimeout(100);
+
+        const dragged = await steps();
+
+        check(wandered === 'visible,visible' && still === was &&
+              dragged === 'hidden,hidden',
+              'a tap that wanders four pixels shows the steps and moves ' +
+              'nothing, and a drag of the divider puts them away: ' +
+              `${wandered} ${was}->${still} ${dragged}`);
+    }
 
     /* By a finger: pressed on the divider and moved 150 pixels up.
        Only Chromium can be told to move one -- Playwright's touch

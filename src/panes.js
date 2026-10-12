@@ -100,6 +100,10 @@ const MEDIA = '(min-width: 60em) and (any-pointer: fine)';
 const SPLIT = 6;
 const LEAF = 64;
 
+/* How far a press goes before it is a drag, of a tab or a divider: past
+   the wander of a finger's tap. */
+const SLOP = 5;
+
 /* How much of a leaf's edge is an edge: the outer fifth, which is enough
    to aim at with a pointer and leaves the middle -- the common answer,
    "put it in this one" -- most of the box. */
@@ -349,6 +353,10 @@ export function createPanes ({ root, catalog, layouts, mode,
 
     let tiled = false;
     let dead = false;           /* once destroy() has handed it all back */
+
+    /* The divider a finger has shown the steps of, and what puts them
+       away (see `dividerOf'): one divider's at a time. */
+    let stepping = null;
     let above = null;           /* the overlay, once anything wants one */
     let hint = null;            /* where a dragged tab would land */
 
@@ -1510,7 +1518,8 @@ export function createPanes ({ root, catalog, layouts, mode,
             const move = (m) =>
             {
                 if (!mine(m) || (!dragging &&
-                    Math.hypot(m.clientX - from.x, m.clientY - from.y) < 5))
+                    Math.hypot(m.clientX - from.x, m.clientY - from.y) <
+                    SLOP))
                     return;
 
                 dragging = true;
@@ -2339,7 +2348,8 @@ export function createPanes ({ root, catalog, layouts, mode,
 
         /* A step either way from a click, for a pointer that cannot
            hold a drag (WCAG 2.5.7): two buttons beside the middle of the
-           divider, seen while the pointer is on it. Pointer's only, and
+           divider, seen while a mouse is on it or after a finger has
+           tapped it (see `unstep'). Pointer's only, and
            out of the accessibility tree -- from the keys, the divider
            takes the arrows itself. Left and up first, on the screen. */
         for (const sign of [-1, 1])
@@ -2363,40 +2373,99 @@ export function createPanes ({ root, catalog, layouts, mode,
             bar.append(step);
         }
 
+        /* Shown while a mouse or a pen is over the divider, which is
+           told by the pointer and not by :hover or (hover: hover): a
+           touch browser keeps :hover on what was last touched, and a
+           tablet's mouse is not its primary pointer. */
+        bar.addEventListener('pointerenter', (h) =>
+        {
+            if (h.pointerType !== 'touch')
+                bar.classList.add('panepointed');
+        });
+        bar.addEventListener('pointerleave', () =>
+            bar.classList.remove('panepointed'));
+
+        /* A finger has no hover, and steps always shown would lie over
+           the panes' own controls either side. So a tap on the divider
+           that drags nothing shows them, until a press anywhere else, a
+           drag of it, or the divider leaving the layout. */
+        const unstep = (d) =>
+        {
+            if (d instanceof Event && bar.contains(d.target))
+                return;
+
+            bar.classList.remove('panesteps');
+            window.removeEventListener('pointerdown', unstep, true);
+            stepping = null;
+        };
+
+        /* One drag of a divider at a time: a second finger on it is
+           not a second drag. */
+        let held = false;
+
         bar.addEventListener('pointerdown', (e) =>
         {
             /* A step is a click, not the start of a drag. */
-            if (e.target !== bar)
+            if (held || e.button !== 0 || e.target !== bar)
                 return;
+
+            held = true;
 
             let from = row ? e.clientX : e.clientY;
             let moved = false;
 
+            /* This pointer's, and no other's, as a tab's drag is; and a
+               drag only past SLOP, as a tab's is, so that a finger's tap,
+               which wanders, is a tap. */
+            const mine = (m) => m.pointerId === e.pointerId;
+
             const move = (m) =>
             {
+                if (!mine(m) || (!moved &&
+                    Math.hypot(m.clientX - e.clientX,
+                               m.clientY - e.clientY) < SLOP))
+                    return;
+
+                if (!moved && stepping?.bar === bar)
+                    stepping.put();
+
+                moved = true;
+
                 const to = row ? m.clientX : m.clientY;
 
-                moved ||= to !== from;
                 by((to - from) * (row && backward(bar) ? -1 : 1));
                 from = to;
             };
 
             /* Kept and told only if it went anywhere: a press on a
-               divider is not a new layout. */
-            const up = () =>
+               divider is not a new layout. A finger's that went nowhere
+               shows the steps; one the browser or the system took
+               (pointercancel) does not. */
+            const end = (u) =>
             {
+                if (!mine(u))
+                    return;
+
                 bar.removeEventListener('pointermove', move);
-                bar.removeEventListener('pointerup', up);
-                bar.removeEventListener('pointercancel', up);
+                bar.removeEventListener('pointerup', end);
+                bar.removeEventListener('pointercancel', end);
+                held = false;
 
                 if (moved)
                     changed();
+                else if (u.type === 'pointerup' && e.pointerType !== 'mouse')
+                {
+                    stepping?.put();
+                    bar.classList.add('panesteps');
+                    window.addEventListener('pointerdown', unstep, true);
+                    stepping = { bar, put: unstep };
+                }
             };
 
             bar.setPointerCapture(e.pointerId);
             bar.addEventListener('pointermove', move);
-            bar.addEventListener('pointerup', up);
-            bar.addEventListener('pointercancel', up);
+            bar.addEventListener('pointerup', end);
+            bar.addEventListener('pointercancel', end);
             e.preventDefault();
         });
 
@@ -2943,6 +3012,10 @@ export function createPanes ({ root, catalog, layouts, mode,
            collapsed is not a place to put the next pane into. */
         if (focus !== null && boxOf(focus) === undefined)
             focus = null;
+
+        /* And a divider that went takes the steps a finger showed. */
+        if (stepping !== null && !stepping.bar.isConnected)
+            stepping.put();
 
         settle();
         refocus(was, from, tab);
@@ -3974,6 +4047,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 return;
 
             dead = true;
+            stepping?.put();
             window.removeEventListener('keydown', command);
             measure?.disconnect();
             document.removeEventListener('visibilitychange', settle);
