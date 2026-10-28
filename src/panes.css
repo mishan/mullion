@@ -65,7 +65,6 @@ body.tiled
 {
     max-width: none;
     margin: 0;
-    padding: 0.6em 0.8em;
     height: var(--pane-height, 100dvh);
     box-sizing: border-box;
     display: flex;
@@ -81,6 +80,15 @@ body.tiled .panesroot
     display: flex;
     flex-direction: column;
     position: relative;
+}
+
+/* The inset is the layout's, not the page's: a header across the top
+   of the body goes edge to edge. A class's weight and no more, so the
+   page's own rule on the root wins and a reset of every div does not. */
+:where(body.tiled) .panesroot
+{
+    padding: 0.6em 0.8em;
+    box-sizing: border-box;
 }
 
 body.tiled .panesroot > .panebox,
@@ -239,15 +247,20 @@ body.tiled .panesroot > .paneleaf { flex: 1 1 auto; min-height: 0; }
     content-visibility: hidden;
 }
 
-/* What was a block in a document is a column in a pane: the box that
-   wants the room takes it, and the rows around it keep their height.
-   Which box that is is said below rather than guessed at. */
+/* The element adopted takes the room its pane has, whatever it is, and
+   more if its content wants more: the pane scrolls. A <section> or
+   <details> is a block in a document and a column in a pane, held to the
+   pane's height so the box in it that wants the room can take it --
+   which box that is is the page's to say. Any other element keeps the
+   layout and margins the page gave it. */
+.panebody > * { flex: 1 0 auto; }
+
 .panebody > details,
 .panebody > section
 {
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
+    flex-shrink: 1;
     min-height: 0;
     margin: 0;
 }

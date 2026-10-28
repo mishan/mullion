@@ -652,10 +652,12 @@ try
 
     const from = await page.locator('#panetab-fx-notes').boundingBox();
     const root = await page.locator('#root').boundingBox();
+    const inset = await page.evaluate(() => parseFloat(
+        getComputedStyle(document.getElementById('root')).paddingTop));
 
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await page.mouse.down();
-    await page.mouse.move(root.x + 60, root.y + 9, { steps: 12 });
+    await page.mouse.move(root.x + 60, root.y + inset + 9, { steps: 12 });
     await page.waitForTimeout(100);
 
     const offered = await page.evaluate(
@@ -787,10 +789,12 @@ try
               const leaf = document.getElementById('pane-fx-paint')
                                    .closest('.paneleaf');
               const root = document.getElementById('root');
+              const pad = getComputedStyle(root);
 
               return document.getElementById('fx-paint').checkVisibility() &&
                      leaf.getBoundingClientRect().width >=
-                         root.getBoundingClientRect().width - 1;
+                         root.clientWidth - parseFloat(pad.paddingLeft) -
+                         parseFloat(pad.paddingRight) - 1;
           }),
           'Alt Enter fills the layout with one pane and draws no others');
 
@@ -1021,6 +1025,7 @@ try
             (c) => c.matches('.panebox, .paneleaf'));
 
         return Math.round(root.getBoundingClientRect().bottom -
+                          parseFloat(getComputedStyle(root).paddingBottom) -
                           layout.getBoundingClientRect().bottom);
     });
 
@@ -4327,6 +4332,62 @@ try
                   (b) => b.getAttribute('aria-hidden') === 'true')),
           `a click on a divider's step moves it, either way: ` +
           `${before2} ${stepped} ${back2}`);
+
+    await own.close();
+
+    /* A pane of any element fills its pane, and one the page hid is
+       pointed out rather than shown blank without a word. */
+    own = await sandbox();
+
+    const warned = [];
+
+    own.on('console', (m) =>
+    {
+        if (m.type() === 'warning')
+            warned.push(m.text());
+    });
+
+    const spare = await own.evaluate(async () =>
+    {
+        const { createPanes } = await import('../../src/panes.js');
+        const { root, home } = window.rv;
+        const aside = home.appendChild(document.createElement('aside'));
+
+        aside.id = 'f-aside';
+        aside.dataset.pane = '';
+        window.rv.box('f-hid').hidden = true;
+        Object.assign(window.rv.box('f-off'), { hidden: true })
+            .dataset.paneOff = '';
+        createPanes({
+            root, catalog: ['f-aside', 'f-hid', 'f-off'], mode: 'm',
+            on: true, media: '(min-width: 1000px)', param: 'review',
+            layouts: { m: { dir: 'row', size: [0.5, 0.5], kids: [
+                { tabs: ['f-aside'] }, { tabs: ['f-hid', 'f-off'] }] } },
+        });
+        await window.rv.wait(50);
+
+        const body = aside.parentElement;
+        const spare = Math.round(body.clientHeight - aside.offsetHeight -
+                          parseFloat(getComputedStyle(body).paddingBottom));
+
+        aside.append(Object.assign(document.createElement('div'),
+                                   { style: 'height: 3000px' }));
+
+        return [spare, aside.offsetHeight >= 3000];
+    });
+
+    /* Untiled and tiled again: adopted a second time. */
+    await own.setViewportSize(NARROW);
+    await own.waitForTimeout(100);
+    await own.setViewportSize(WIDE);
+    await own.waitForTimeout(100);
+
+    check(spare[0] <= 1 && spare[1],
+          'an <aside> pane fills its pane, and one taller than it keeps ' +
+          `its height: ${spare}`);
+    check(warned.length === 1 && warned[0].includes('"f-hid"'),
+          'a pane tiled while hidden is warned about, once, and one off ' +
+          `with its mode is not: ${warned}`);
 
     await own.close();
     }

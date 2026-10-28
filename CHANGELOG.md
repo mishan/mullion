@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The layout's inset from the window is padding on the root rather than
+  on `body.tiled`, so a header across the body goes edge to edge, and a
+  page's own padding on the root replaces the inset. The root is
+  `box-sizing: border-box`.
+  A page that set `body.tiled { padding: 0 }` and inset the root itself
+  can drop the first rule, and should make the second padding.
+
+### Fixed
+
+- A pane of any element fills at least its pane, not only a `<section>`
+  or a `<details>`; one taller than its pane scrolls the pane. Those two
+  are still the only ones made a column and held to the pane's height.
+- A pane the page has set `hidden` showed empty once tiled, with nothing
+  to say why. mullion warns about it in the console, once per pane.
+- The README said `?panes=1` forces tiling. It asks for it, and the
+  screen still decides. The README now says how a test gets a screen
+  that tiles, which class names the layout uses, and that the quick
+  start needs `on: true`.
+
 ## 0.5.1 — 2026-10-12
 
 ### Fixed

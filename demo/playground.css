@@ -689,9 +689,7 @@ html.touch body.tiled #st-activity { display: none; }
  * toolbars around it keep theirs.
  */
 
-body.tiled { padding: 0; }
-
-body.tiled .panesroot { margin: 0.5em 0.6em; }
+body.tiled .panesroot { padding: 0.5em 0.6em; }
 
 body.tiled .pane { border-radius: 8px; }
 

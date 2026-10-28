@@ -71,7 +71,7 @@
  * WHAT IS POLICY AND NOT MECHANISM is an argument, with this page's
  * answer as the default: the screen worth tiling on (`media'), a
  * divider's thickness and a leaf's floor (`split', `leaf'), how much of
- * a leaf's edge is an edge (`edge'), the query parameter that turns it
+ * a leaf's edge is an edge (`edge'), the query parameter that asks for it
  * on (`param'), where a layout is kept (`storage'), the chords (`keys'),
  * how a strip too narrow for its tabs takes them (`strip'), which panes
  * alone in a leaf go without one (`lone'), whether the tabs are a strip
@@ -416,6 +416,7 @@ export function createPanes ({ root, catalog, layouts, mode,
 
             host: null,             /* the section it is shown in */
             wasOpen: true,          /* the fold it had before adoption */
+            warned: false,          /* about `hidden', once */
             fold: null,             /* the listener, so destroy() can go */
 
             /* Added once the page was up, and the pane named to put it
@@ -583,6 +584,16 @@ export function createPanes ({ root, catalog, layouts, mode,
            `aria-labelledby' rather than an `aria-label' beside it -- two
            names on one element is one of them quietly winning. */
         p.host.setAttribute('role', 'tabpanel');
+
+        /* `hidden' is the page's and is left alone (see OFF), so a pane
+           the page hid for its own reasons shows as an empty one. */
+        if (p.el.hidden && !off(p.el) && !p.warned)
+        {
+            p.warned = true;
+            console.warn(`mullion: pane "${p.id}" is hidden, so it shows ` +
+                         'empty. To take a pane out of the layout, use ' +
+                         'data-pane-off or available().');
+        }
 
         p.el.replaceWith(p.slot);
         body.append(p.el);
