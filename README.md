@@ -59,6 +59,7 @@ const panes = createPanes({
   root: document.getElementById('layout'),
   catalog: ['editor', 'console', 'inspector'],
   mode: 'default',
+  on: true,
   layouts: {
     default: {
       dir: 'row', size: [0.6, 0.4], kids: [
@@ -151,7 +152,13 @@ over it puts the focus on its panel when it is moved to.
 `data-pane-off` and not `hidden`, deliberately: `hidden` is a word most
 pages are already using for something else, and a layout that read it
 would lose panes to an unrelated `el.hidden = true` and never put them
-back.
+back. A pane that is `hidden` when it is tiled shows empty, and mullion
+says so in the console.
+
+The layout's own elements carry classes that begin with `pane` — `.pane`,
+`.panebody`, `.paneleaf`, `.panetabs` and the rest — and the body gets
+`tiled`. Keep your own elements off those names, or panes.css styles
+them too.
 
 ## Options
 
@@ -172,7 +179,7 @@ Everything below is a default rather than a rule.
 | `split` | a divider's thickness in pixels | `6` |
 | `leaf` | a leaf's own floor in pixels | `64` |
 | `edge` | how much of a leaf's edge is an edge | `0.2` |
-| `param` | query parameter that forces it on or off | `'panes'` |
+| `param` | query parameter that asks for it: `1` on, any other value off; the screen still decides | `'panes'` |
 | `storage` | where a layout is kept; its methods may return promises | `localStorage` |
 | `keys` | the commands, merged over the defaults | `Alt` chords |
 | `strip` | `'scroll'` keeps tabs and the drawer at their own widths in a row that scrolls | `'shrink'` |
@@ -502,6 +509,15 @@ are ordinary class selectors, so at equal specificity the later rule wins.
 tracks `visualViewport` — because `dvh` is wrong the moment an on-screen
 keyboard appears — should set this instead.
 
+The layout's inset from the window is padding on the root, at one
+class's specificity, so your own rule on the root replaces it. The body is left to
+the page: a header across it goes edge to edge.
+
+A divider resizes a pane without the window resizing, and `.panebody`
+is a size container for its width only. A pane that draws at its own
+size, such as a `<canvas>`, should watch itself with a `ResizeObserver`
+rather than the window.
+
 With `header: 'corner'` there is no strip: a leaf's tabs sit over its top
 corner, in sight while the pointer or the focus is in the leaf or a tab
 is being dragged. They are the panes' icons (`data-pane-icon`; the title
@@ -591,6 +607,14 @@ scrolled to is kept either way.
 Chromium's renderer has crashed on some of those moves, taking the page
 with it. mullion works around it, and will until the browser's fix is
 what people have.
+
+A test that needs the layout tiled needs a screen that tiles, since
+`?panes=1` only asks. A test that builds its own page can pass
+`media: 'all'`. One that drives the real page should have the browser
+report a fine pointer, so the page's own query decides as it would for a
+person: Chromium, Firefox and WebKit launched by Playwright already do,
+and Firefox under geckodriver does once its profile sets
+`ui.primaryPointerCapabilities` and `ui.allPointerCapabilities` to `6`.
 
 ## License
 

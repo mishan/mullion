@@ -70,7 +70,8 @@ export interface PanesOptions {
   /** How much of a leaf's edge counts as an edge when a tab is dropped
    *  on it, as a fraction of the box. */
   edge?: number;
-  /** The query parameter that forces the tiler on or off. */
+  /** The query parameter that asks for the tiler on or off; the screen
+   *  still decides. */
   param?: string;
   /** Where a layout is kept between visits. Any of the three may answer
    *  with a promise, for a layout kept on a server: the page opens on the
