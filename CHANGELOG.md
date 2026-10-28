@@ -22,6 +22,11 @@
   screen still decides. The README now says how a test gets a screen
   that tiles, which class names the layout uses, and that the quick
   start needs `on: true`.
+- A divider taken out of the layout mid-drag, by a key or a call that
+  closed a pane beside it, and put back later, followed a pointer that
+  only passed over it, and took no press until it had.
+- A divider taken out of the layout with a mouse over it came back
+  showing its steps.
 
 ## 0.5.1 — 2026-10-12
 

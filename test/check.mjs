@@ -4390,6 +4390,55 @@ try
           `with its mode is not: ${warned}`);
 
     await own.close();
+
+    /* A divider taken out of the layout under the pointer, mid-drag or
+       hovered, and put back: it drags again, and shows no steps nobody
+       is pointing at. */
+    own = await sandbox();
+    await own.evaluate(() => window.rv.make(['d-a', 'd-b', 'd-c'], {
+        layouts: { m: { dir: 'row', size: [0.3, 0.3, 0.4], kids: [
+            { tabs: ['d-a'] }, { tabs: ['d-b'] }, { tabs: ['d-c'] }] } } }));
+
+    const second = () => own.locator('.panesplit').nth(1);
+    const share = () => own.evaluate(() => Number(
+        document.querySelectorAll('.panesplit')[1]
+                .getAttribute('aria-valuenow')));
+    const middle = async () =>
+    {
+        const b = await second().boundingBox();
+
+        return [b.x + b.width / 2, b.y + b.height / 2];
+    };
+
+    let [dx, dy] = await middle();
+
+    await own.mouse.move(dx, dy);
+    await own.mouse.down();
+    await own.mouse.move(dx + 30, dy, { steps: 5 });
+    await own.evaluate(() => window.rv.panes.close('d-c'));
+    await own.mouse.move(dx - 200, dy + 100, { steps: 5 });
+    await own.mouse.up();
+    await own.evaluate(() => window.rv.panes.present('d-c'));
+    await second().waitFor();
+
+    const stepsShown = await own.evaluate(() =>
+        [...document.querySelectorAll('.panesplit')[1].children]
+            .some((b) => b.checkVisibility({ visibilityProperty: true })));
+    const was = await share();
+
+    [dx, dy] = await middle();
+    await own.mouse.move(dx - 20, dy);
+    await own.mouse.move(dx + 20, dy, { steps: 20 });
+
+    const hovered = await share();
+
+    check(hovered === was,
+          'a divider taken out mid-drag and put back is not dragged by a ' +
+          `pointer that only passes over it: ${was} ${hovered}`);
+    check(!stepsShown,
+          'and shows no steps for a pointer that left while it was out');
+
+    await own.close();
     }
 
     /* ---- the layout cases, which are every implementation's ----

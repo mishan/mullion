@@ -357,6 +357,13 @@ export function createPanes ({ root, catalog, layouts, mode,
     /* The divider a finger has shown the steps of, and what puts them
        away (see `dividerOf'): one divider's at a time. */
     let stepping = null;
+
+    /* The dividers held down, each with what lets it go, and the one a
+       mouse is over: a divider taken out of the layout hears neither the
+       release nor the pointer leaving, so the render that took it out
+       ends both. */
+    const gripped = new Map();
+    let pointed = null;
     let above = null;           /* the overlay, once anything wants one */
     let hint = null;            /* where a dragged tab would land */
 
@@ -2391,10 +2398,16 @@ export function createPanes ({ root, catalog, layouts, mode,
         bar.addEventListener('pointerenter', (h) =>
         {
             if (h.pointerType !== 'touch')
+            {
                 bar.classList.add('panepointed');
+                pointed = bar;
+            }
         });
         bar.addEventListener('pointerleave', () =>
-            bar.classList.remove('panepointed'));
+        {
+            bar.classList.remove('panepointed');
+            pointed = null;
+        });
 
         /* A finger has no hover, and steps always shown would lie over
            the panes' own controls either side. So a tap on the divider
@@ -2448,6 +2461,15 @@ export function createPanes ({ root, catalog, layouts, mode,
                 from = to;
             };
 
+            const letGo = () =>
+            {
+                bar.removeEventListener('pointermove', move);
+                bar.removeEventListener('pointerup', end);
+                bar.removeEventListener('pointercancel', end);
+                gripped.delete(bar);
+                held = false;
+            };
+
             /* Kept and told only if it went anywhere: a press on a
                divider is not a new layout. A finger's that went nowhere
                shows the steps; one the browser or the system took
@@ -2457,10 +2479,7 @@ export function createPanes ({ root, catalog, layouts, mode,
                 if (!mine(u))
                     return;
 
-                bar.removeEventListener('pointermove', move);
-                bar.removeEventListener('pointerup', end);
-                bar.removeEventListener('pointercancel', end);
-                held = false;
+                letGo();
 
                 if (moved)
                     changed();
@@ -2474,6 +2493,7 @@ export function createPanes ({ root, catalog, layouts, mode,
             };
 
             bar.setPointerCapture(e.pointerId);
+            gripped.set(bar, letGo);
             bar.addEventListener('pointermove', move);
             bar.addEventListener('pointerup', end);
             bar.addEventListener('pointercancel', end);
@@ -3024,9 +3044,20 @@ export function createPanes ({ root, catalog, layouts, mode,
         if (focus !== null && boxOf(focus) === undefined)
             focus = null;
 
-        /* And a divider that went takes the steps a finger showed. */
+        /* And a divider that went takes the steps a finger showed, a
+           mouse's over it, and a drag of it. */
         if (stepping !== null && !stepping.bar.isConnected)
             stepping.put();
+
+        if (pointed !== null && !pointed.isConnected)
+        {
+            pointed.classList.remove('panepointed');
+            pointed = null;
+        }
+
+        for (const [bar, letGo] of gripped)
+            if (!bar.isConnected)
+                letGo();
 
         settle();
         refocus(was, from, tab);
