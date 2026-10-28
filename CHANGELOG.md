@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-27
+
+Fixes from tiling a second page with it. The inset around the layout
+moves from the body to the root: a page that styled `body.tiled`'s
+padding, or put a margin on the root, should read Changed below.
 
 ### Changed
 
